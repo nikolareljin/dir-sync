@@ -1,6 +1,6 @@
 # Dir Sync
 
-Dir Sync is a cross-platform desktop companion that keeps directories mirrored through rsync-style actions. It lives in the system toolbar, lets you define reusable sync actions, watches for removable or network destinations, and surfaces notifications when jobs finish or devices appear.
+Dir Sync is a cross-platform desktop companion that keeps directories mirrored through rsync-style actions. It lives in the system tray, lets you define reusable sync actions, watches for removable or network destinations, and surfaces notifications when jobs finish or devices appear.
 
 ## Features
 
@@ -13,7 +13,28 @@ Dir Sync is a cross-platform desktop companion that keeps directories mirrored t
 
 ## Getting Started
 
-See `docs/BUILD.md` for environment setup, dependency installation, and packaging guidance. Testing and verification steps are documented in `docs/TESTING.md`.
+### Environment Setup
+```bash
+python -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install --upgrade pip
+pip install -e .[dev]
+```
+
+### Run the App
+```bash
+python -m dirsync.app
+```
+The tray icon appears so you can configure sync pairs or trigger existing jobs.
+
+### Build a Standalone Binary
+Use the helper script (which installs PyInstaller if necessary) to mirror the packaging steps from `docs/BUILD.md`:
+```bash
+./scripts/build.sh
+```
+Artifacts are written to `dist/`.
+
+For additional background or optional packaging targets, see `docs/BUILD.md`. Testing guidance lives in `docs/TESTING.md`.
 
 ## License
 
