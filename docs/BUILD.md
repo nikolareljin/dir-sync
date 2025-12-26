@@ -26,3 +26,10 @@ pip install pyinstaller
 pyinstaller --name dir-sync --onefile --windowed src/dirsync/app.py
 ```
 Artifacts land in `dist/`. Repeat on Linux/macOS/Windows to create native binaries (GitHub Actions workflows do this automatically when tags are pushed).
+
+## Containerized Build
+If you prefer Docker (or want to avoid installing build dependencies locally), run:
+```bash
+./scripts/build_in_docker.sh
+```
+This uses the `python:3.11-slim` image, installs project dependencies plus PyInstaller inside the container, and writes the resulting binary to your local `dist/` directory.
