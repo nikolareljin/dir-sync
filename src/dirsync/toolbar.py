@@ -217,8 +217,12 @@ class ToolbarController:
             refresh_list()
             self.refresh()
 
-        tk.Button(root, text="Add", command=on_add).grid(row=1, column=0, sticky="ew", padx=8, pady=4)
-        tk.Button(root, text="Edit", command=on_edit).grid(row=1, column=1, sticky="ew", padx=8, pady=4)
+        tk.Button(root, text="Add", command=on_add).grid(
+            row=1, column=0, sticky="ew", padx=8, pady=4
+        )
+        tk.Button(root, text="Edit", command=on_edit).grid(
+            row=1, column=1, sticky="ew", padx=8, pady=4
+        )
         tk.Button(root, text="Run", command=lambda: _run_selected()).grid(
             row=2, column=0, sticky="ew", padx=8, pady=4
         )
