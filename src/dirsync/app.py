@@ -53,11 +53,13 @@ class DirSyncApp:
             for action in self.manager.config.actions
             if self._normalize_path(action.dst_path).startswith(self._normalize_path(mount))
         ]
+        soft_run = self.toolbar.soft_run_enabled
         for action in matches:
-            if action.action_type == "auto_on_destination" or confirm(
-                f"Run '{action.name}' for {mount}?"
-            ):
-                self.executor.run_action(action)
+            prompt = f"Run '{action.name}' for {mount}?"
+            if soft_run:
+                prompt = f"{prompt} (soft run)"
+            if action.action_type == "auto_on_destination" or confirm(prompt):
+                self.executor.run_action(action, soft_run=soft_run)
 
     def _normalize_path(self, value: str) -> str:
         return str(Path(value).resolve()).rstrip("/\\")

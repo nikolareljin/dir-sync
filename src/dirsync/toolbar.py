@@ -92,6 +92,9 @@ class ToolbarController:
             )
         )
 
+        run_label = "Run"
+        if self.soft_run_enabled:
+            run_label = "Run (soft run)"
         menu = pystray.Menu(
             pystray.MenuItem(
                 "Manage configurations",
@@ -104,7 +107,7 @@ class ToolbarController:
             pystray.MenuItem(
                 "Soft run (dry-run preview)", self._toggle_soft_run, checked=self._is_soft_run_checked
             ),
-            pystray.MenuItem("Run", run_menu),
+            pystray.MenuItem(run_label, run_menu),
             pystray.MenuItem("Soft run (per-action)", soft_run_menu),
             pystray.MenuItem("Run (force full sync)", full_run_menu),
             pystray.MenuItem("Modify saved action", edit_menu),
@@ -216,7 +219,7 @@ class ToolbarController:
 
         tk.Button(root, text="Add", command=on_add).grid(row=1, column=0, sticky="ew", padx=8, pady=4)
         tk.Button(root, text="Edit", command=on_edit).grid(row=1, column=1, sticky="ew", padx=8, pady=4)
-        tk.Button(root, text="Run", command=lambda: _run_selected(False)).grid(
+        tk.Button(root, text="Run", command=lambda: _run_selected()).grid(
             row=2, column=0, sticky="ew", padx=8, pady=4
         )
         tk.Button(root, text="Soft run", command=lambda: _run_selected(True)).grid(
