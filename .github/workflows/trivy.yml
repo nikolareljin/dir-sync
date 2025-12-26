@@ -1,0 +1,17 @@
+name: Trivy Scan
+
+on:
+  pull_request:
+    branches: [main, master, "release/*"]
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  trivy:
+    uses: nikolareljin/ci-helpers/.github/workflows/trivy-scan.yml@v0.1.0
+    with:
+      scan_path: "."
+      fail_on_findings: true
+      upload_artifact: true

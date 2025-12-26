@@ -7,20 +7,13 @@ on:
       - main
 
 jobs:
-  lint-and-test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e .[dev]
-      - name: Lint
-        run: scripts/lint.sh
-      - name: Test
-        run: scripts/run_tests.sh
+  ci:
+    uses: nikolareljin/ci-helpers/.github/workflows/presets/python.yml@v0.1.0
+    with:
+      python_version: "3.11"
+      lint_command: >-
+        git submodule update --init --recursive &&
+        python -m pip install --upgrade pip &&
+        python -m pip install -e .[dev] &&
+        scripts/lint.sh
+      test_command: "scripts/run_tests.sh"

@@ -1,0 +1,20 @@
+name: Release Tag Guard
+
+on:
+  pull_request:
+    branches: [main, master, "release/*"]
+
+jobs:
+  release_guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Guard release tag
+        id: release_guard
+        uses: nikolareljin/ci-helpers/.github/actions/check-release-tag@v0.1.0
+        with:
+          release_branch: ${{ github.head_ref }}
+          fetch_tags: true
