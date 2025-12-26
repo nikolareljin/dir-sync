@@ -8,7 +8,7 @@ on:
 
 jobs:
   ci:
-    uses: nikolareljin/ci-helpers/.github/workflows/presets/python.yml@0.1.1
+    uses: nikolareljin/ci-helpers/.github/workflows/python.yml@0.1.1
     with:
       python_version: "3.11"
       lint_command: >-
