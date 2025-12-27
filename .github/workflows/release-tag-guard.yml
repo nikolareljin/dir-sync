@@ -15,7 +15,7 @@ jobs:
           fetch-tags: true
       - name: Guard release tag
         id: release_guard
-        uses: nikolareljin/ci-helpers/.github/actions/check-release-tag@0.1.1
+        uses: nikolareljin/ci-helpers/.github/actions/check-release-tag@0.1.2-rc
         with:
           release_branch: ${{ github.head_ref }}
           fetch_tags: true

@@ -7,12 +7,6 @@ on:
 
 jobs:
   ci:
-    uses: nikolareljin/ci-helpers/.github/workflows/python.yml@0.1.1
+    uses: nikolareljin/ci-helpers/.github/workflows/python-scans.yml@0.1.2-rc
     with:
       python_version: "3.11"
-      lint_command: >-
-        git submodule update --init --recursive &&
-        python -m pip install --upgrade pip &&
-        python -m pip install -e .[dev] &&
-        scripts/lint.sh
-      test_command: "scripts/run_tests.sh"
