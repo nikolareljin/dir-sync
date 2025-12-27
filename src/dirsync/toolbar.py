@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import datetime as dt
 import threading
+import time
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog
-import time
 from typing import Callable
 
 import pystray
@@ -105,7 +105,9 @@ class ToolbarController:
                 "Select directories to sync", lambda icon, item: self._open_creator()
             ),
             pystray.MenuItem(
-                "Soft run (dry-run preview)", self._toggle_soft_run, checked=self._is_soft_run_checked
+                "Soft run (dry-run preview)",
+                self._toggle_soft_run,
+                checked=self._is_soft_run_checked,
             ),
             pystray.MenuItem(run_label, run_menu),
             pystray.MenuItem("Soft run (per-action)", soft_run_menu),

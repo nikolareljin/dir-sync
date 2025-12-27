@@ -9,6 +9,5 @@ dependencies correctly.
 
 from dirsync.app import main
 
-
 if __name__ == "__main__":  # pragma: no cover - used only during packaging
-  main()
+    main()
