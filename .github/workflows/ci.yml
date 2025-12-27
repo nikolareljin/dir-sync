@@ -10,3 +10,5 @@ jobs:
     uses: nikolareljin/ci-helpers/.github/workflows/python-scan.yml@0.1.2-rc
     with:
       python_version: "3.11"
+      working_directory: "."
+      
