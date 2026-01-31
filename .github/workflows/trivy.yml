@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   trivy:
-    uses: nikolareljin/ci-helpers/.github/workflows/trivy-scan.yml@0.1.2-rc
+    uses: nikolareljin/ci-helpers/.github/workflows/trivy-scan.yml@production
 
     with:
       scan_path: "."

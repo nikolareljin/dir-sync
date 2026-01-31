@@ -18,6 +18,8 @@ class SyncAction:
     method: str = "two_way"
     action_type: str = "manual"
     schedule: Optional[str] = None  # cron format when action_type == scheduled
+    includes: List[str] = field(default_factory=list)  # glob patterns to include
+    excludes: List[str] = field(default_factory=list)  # glob patterns to exclude
 
     def normalize(self) -> "SyncAction":
         self.src_path = os.path.expanduser(self.src_path)
@@ -28,6 +30,8 @@ class SyncAction:
             raise ValueError(f"Unsupported action type: {self.action_type}")
         if self.action_type != "scheduled":
             self.schedule = None
+        self.includes = [p.strip() for p in self.includes if p.strip()]
+        self.excludes = [p.strip() for p in self.excludes if p.strip()]
         return self
 
 

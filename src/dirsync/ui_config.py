@@ -33,7 +33,7 @@ class ConfigWindow:
     def _open(self, action: SyncAction, create: bool) -> None:
         root = tk.Tk()
         root.title(f"Dir Sync - {action.name}")
-        root.geometry("600x420")
+        root.geometry("600x560")
         root.grid_columnconfigure(0, weight=1)
         root.grid_columnconfigure(1, weight=1)
 
@@ -116,8 +116,24 @@ class ConfigWindow:
         )
         action_type_menu.grid(row=4, column=1, sticky="ew", padx=5)
 
+        # Include / Exclude patterns
+        filter_frame = ttk.LabelFrame(root, text="File filters (one glob pattern per line)")
+        filter_frame.grid(row=5, column=0, columnspan=2, sticky="nsew", padx=5, pady=5)
+        filter_frame.grid_columnconfigure(0, weight=1)
+        filter_frame.grid_columnconfigure(1, weight=1)
+
+        ttk.Label(filter_frame, text="Include patterns").grid(row=0, column=0, sticky="w", padx=4)
+        includes_text = tk.Text(filter_frame, height=3, width=25)
+        includes_text.grid(row=1, column=0, sticky="ew", padx=4, pady=(0, 4))
+        includes_text.insert("1.0", "\n".join(action.includes))
+
+        ttk.Label(filter_frame, text="Exclude patterns").grid(row=0, column=1, sticky="w", padx=4)
+        excludes_text = tk.Text(filter_frame, height=3, width=25)
+        excludes_text.grid(row=1, column=1, sticky="ew", padx=4, pady=(0, 4))
+        excludes_text.insert("1.0", "\n".join(action.excludes))
+
         schedule_frame = ttk.LabelFrame(root, text="Schedule (cron)")
-        schedule_frame.grid(row=5, column=0, columnspan=2, sticky="nsew", padx=5, pady=5)
+        schedule_frame.grid(row=6, column=0, columnspan=2, sticky="nsew", padx=5, pady=5)
         schedule_frame.grid_columnconfigure(0, weight=1)
         schedule_frame.grid_columnconfigure(1, weight=1)
 
@@ -218,6 +234,10 @@ class ConfigWindow:
 
         button_text = "Save"
 
+        def _parse_patterns(text_widget: tk.Text) -> list[str]:
+            raw = text_widget.get("1.0", "end").strip()
+            return [line.strip() for line in raw.splitlines() if line.strip()]
+
         def on_submit():
             payload = SyncAction(
                 name=name_var.get().strip(),
@@ -226,10 +246,10 @@ class ConfigWindow:
                 method=method_var.get(),
                 action_type=action_type_var.get(),
                 schedule=(
-                    schedule_var.get().strip()
-                    if action_type_var.get() == "scheduled"
-                    else None
+                    schedule_var.get().strip() if action_type_var.get() == "scheduled" else None
                 ),
+                includes=_parse_patterns(includes_text),
+                excludes=_parse_patterns(excludes_text),
             )
             if create:
                 self.manager.config.add_action(payload)
@@ -246,11 +266,11 @@ class ConfigWindow:
             self.manager.save()
             root.destroy()
 
-        tk.Button(root, text=button_text, command=on_submit).grid(row=7, column=0, padx=5, pady=10)
-        tk.Button(root, text="Cancel", command=root.destroy).grid(row=7, column=1, padx=5, pady=10)
+        tk.Button(root, text=button_text, command=on_submit).grid(row=8, column=0, padx=5, pady=10)
+        tk.Button(root, text="Cancel", command=root.destroy).grid(row=8, column=1, padx=5, pady=10)
         if not create:
             tk.Button(root, text="Delete", command=on_delete).grid(
-                row=8, column=0, columnspan=2, padx=5, pady=(0, 10)
+                row=9, column=0, columnspan=2, padx=5, pady=(0, 10)
             )
 
         root.mainloop()

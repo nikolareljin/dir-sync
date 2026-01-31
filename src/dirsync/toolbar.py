@@ -70,9 +70,7 @@ class ToolbarController:
         soft_run_menu = pystray.Menu(
             *(
                 [
-                    pystray.MenuItem(
-                        action.name, self._make_runner(action, soft_run=True)
-                    )
+                    pystray.MenuItem(action.name, self._make_runner(action, soft_run=True))
                     for action in self.manager.config.actions
                 ]
                 or [placeholder]
@@ -83,9 +81,7 @@ class ToolbarController:
         full_run_menu = pystray.Menu(
             *(
                 [
-                    pystray.MenuItem(
-                        action.name, self._make_runner(action, soft_run=False)
-                    )
+                    pystray.MenuItem(action.name, self._make_runner(action, soft_run=False))
                     for action in self.manager.config.actions
                 ]
                 or [placeholder]
@@ -101,9 +97,7 @@ class ToolbarController:
                 lambda icon, item: self._open_manager(),
                 default=True,
             ),
-            pystray.MenuItem(
-                "Select directories to sync", lambda icon, item: self._open_creator()
-            ),
+            pystray.MenuItem("Select directories to sync", lambda icon, item: self._open_creator()),
             pystray.MenuItem(
                 "Soft run (dry-run preview)",
                 self._toggle_soft_run,
@@ -121,9 +115,7 @@ class ToolbarController:
 
     def _make_runner(self, action: SyncAction, soft_run: bool | None = None) -> Callable:
         def _runner(icon, item):
-            effective_soft_run = (
-                self.soft_run_enabled if soft_run is None else soft_run
-            )
+            effective_soft_run = self.soft_run_enabled if soft_run is None else soft_run
             threading.Thread(
                 target=self._run_action, args=(action, effective_soft_run), daemon=True
             ).start()
@@ -279,6 +271,7 @@ class ToolbarController:
             if not Path(action.dst_path).exists() or not Path(action.src_path).exists():
                 prefix = "[!]"
         return f"{prefix} {action.name}"
+
     def _export_config(self):
         EXPORT_DIR.mkdir(parents=True, exist_ok=True)
         default = EXPORT_DIR / f"dir-sync-{dt.datetime.now():%Y%m%d-%H%M%S}.yml"

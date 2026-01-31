@@ -7,7 +7,7 @@ on:
 
 jobs:
   ci:
-    uses: nikolareljin/ci-helpers/.github/workflows/python-scan.yml@4a1f1d7ad5f84ec101b87fdad2b534f38859c5c5
+    uses: nikolareljin/ci-helpers/.github/workflows/python-scan.yml@production
 
     with:
       python_version: "3.11"

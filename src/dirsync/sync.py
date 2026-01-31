@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import fnmatch
 import logging
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, List
 
 from .config import SyncAction
 from .constants import IS_WINDOWS
@@ -31,7 +32,9 @@ class SyncExecutor:
                 )
             )
         else:
-            outputs.append(self._run_one_way(action.src_path, action.dst_path, action, soft_run))
+            outputs.append(
+                self._run_one_way(action.src_path, action.dst_path, action, soft_run=soft_run)
+            )
         if soft_run:
             combined = "\n".join([o for o in outputs if o]).strip()
             message = combined if combined else f"Preview for '{action.name}' completed"
@@ -52,12 +55,14 @@ class SyncExecutor:
                 self.rsync_path,
                 "-avh",
                 "--delete",
-                f"{src_path}/",
-                f"{dst_path}/",
             ]
             if soft_run:
-                cmd.insert(1, "--dry-run")
-                cmd.insert(2, "--stats")
+                cmd.extend(["--dry-run", "--stats"])
+            for pattern in action.includes:
+                cmd.extend(["--include", pattern])
+            for pattern in action.excludes:
+                cmd.extend(["--exclude", pattern])
+            cmd.extend([f"{src_path}/", f"{dst_path}/"])
             return self._run_command(cmd, label, soft_run)
         elif self.robocopy_path:
             cmd = [
@@ -66,6 +71,10 @@ class SyncExecutor:
                 str(dst_path),
                 "/MIR",
             ]
+            if action.includes:
+                cmd.extend(action.includes)
+            if action.excludes:
+                cmd.extend(["/XF"] + action.excludes + ["/XD"] + action.excludes)
             if soft_run:
                 cmd.append("/L")
             return self._run_command(cmd, label, soft_run)
@@ -73,7 +82,7 @@ class SyncExecutor:
             if soft_run:
                 return "Soft run not available without rsync/robocopy; install rsync to preview."
             self.logger.warning("rsync not available; falling back to shutil copy")
-            self._python_copy(src_path, dst_path)
+            self._python_copy(src_path, dst_path, action.includes, action.excludes)
             return ""
 
     def _run_command(self, cmd: Iterable[str], label: str, soft_run: bool = False) -> str:
@@ -89,8 +98,22 @@ class SyncExecutor:
             return preview
         return ""
 
-    def _python_copy(self, src: Path, dst: Path) -> None:
+    def _python_copy(
+        self,
+        src: Path,
+        dst: Path,
+        includes: List[str] | None = None,
+        excludes: List[str] | None = None,
+    ) -> None:
+        def _matches(name: str, rel: str, patterns: List[str]) -> bool:
+            return any(fnmatch.fnmatch(rel, p) or fnmatch.fnmatch(name, p) for p in patterns)
+
         for item in src.rglob("*"):
+            rel = str(item.relative_to(src))
+            if includes and not _matches(item.name, rel, includes):
+                continue
+            if excludes and _matches(item.name, rel, excludes):
+                continue
             target = dst / item.relative_to(src)
             if item.is_dir():
                 target.mkdir(parents=True, exist_ok=True)
