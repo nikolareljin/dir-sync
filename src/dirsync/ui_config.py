@@ -225,7 +225,11 @@ class ConfigWindow:
                 dst_path=dst_path_var.get().strip(),
                 method=method_var.get(),
                 action_type=action_type_var.get(),
-                schedule=schedule_var.get().strip() if action_type_var.get() == "scheduled" else None,
+                schedule=(
+                    schedule_var.get().strip()
+                    if action_type_var.get() == "scheduled"
+                    else None
+                ),
             )
             if create:
                 self.manager.config.add_action(payload)

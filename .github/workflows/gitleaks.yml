@@ -2,7 +2,8 @@ name: Secrets Scan
 
 on:
   pull_request:
-    branches: [main, master, "release/*"]
+  push:
+    branches: ["**"]
 
 jobs:
   gitleaks:
