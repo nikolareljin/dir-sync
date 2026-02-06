@@ -109,14 +109,14 @@ class SyncExecutor:
                 return True
         return False
 
-    def _snapshot(self, root: Path) -> dict[str, tuple[int, int, str]]:
-        snapshot: dict[str, tuple[int, int, str]] = {}
+    def _snapshot(self, root: Path) -> dict[str, tuple[int, str]]:
+        snapshot: dict[str, tuple[int, str]] = {}
         for path in root.rglob("*"):
             if not path.is_file():
                 continue
             rel = os.fspath(path.relative_to(root))
             stat = path.stat()
-            snapshot[rel] = (stat.st_size, stat.st_mtime_ns, self._file_hash(path))
+            snapshot[rel] = (stat.st_size, self._file_hash(path))
         return snapshot
 
     def _file_hash(self, path: Path) -> str:

@@ -24,14 +24,56 @@ if [[ -z "$PYTHON_BIN" ]]; then
 fi
 
 print_info "Building standalone executable via PyInstaller"
-print_info "Ensuring dir-sync runtime dependencies are installed"
-"$PYTHON_BIN" -m pip install --upgrade pip
-"$PYTHON_BIN" -m pip install -e .
+print_info "Ensuring required Python modules are available"
 
-if ! command -v pyinstaller >/dev/null 2>&1; then
-  log_warn "pyinstaller not found; installing temporarily"
-  "$PYTHON_BIN" -m pip install --upgrade pyinstaller
+ensure_module() {
+  local module_name="$1"
+  local pip_name="$2"
+  if "$PYTHON_BIN" -c "import importlib.util,sys; sys.exit(0 if importlib.util.find_spec('${module_name}') else 1)" >/dev/null 2>&1; then
+    return 0
+  fi
+  log_warn "Missing Python module: ${module_name} (installing ${pip_name})"
+  "$PYTHON_BIN" -m pip install --user "$pip_name"
+}
+
+ensure_module "croniter" "croniter>=1.4"
+ensure_module "PIL" "pillow>=10.0"
+ensure_module "plyer" "plyer>=2.1"
+ensure_module "psutil" "psutil>=5.9"
+ensure_module "pystray" "pystray>=0.19"
+ensure_module "yaml" "pyyaml>=6.0"
+ensure_module "typer" "typer>=0.12"
+
+if ! "$PYTHON_BIN" -c "import tkinter" >/dev/null 2>&1; then
+  log_warn "tkinter is missing for $PYTHON_BIN"
+  print_info "Attempting to install OS dependencies automatically"
+  if "$SCRIPT_DIR/install_deps.sh"; then
+    if ! "$PYTHON_BIN" -c "import tkinter" >/dev/null 2>&1; then
+      echo "tkinter is still missing after dependency install." >&2
+      echo "Install python3-tk manually and rebuild." >&2
+      exit 1
+    fi
+    print_success "tkinter dependency installed successfully."
+  else
+    echo "Automatic dependency installation failed." >&2
+    echo "Run ./scripts/install_deps.sh manually and rebuild." >&2
+    exit 1
+  fi
 fi
 
-pyinstaller --noconfirm --name dir-sync --windowed --onefile src/dirsync/app.py
+if ! "$PYTHON_BIN" -c "import PyInstaller" >/dev/null 2>&1; then
+  log_warn "pyinstaller not found; installing temporarily"
+  "$PYTHON_BIN" -m pip install --user pyinstaller
+fi
+
+"$PYTHON_BIN" -m PyInstaller \
+  --clean \
+  --noconfirm \
+  --name dir-sync \
+  --windowed \
+  --onefile \
+  --hidden-import tkinter \
+  --hidden-import tkinter.filedialog \
+  --hidden-import tkinter.messagebox \
+  src/dirsync/app.py
 print_success "Artifacts available in dist/"

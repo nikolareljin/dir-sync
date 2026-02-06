@@ -7,6 +7,7 @@ REPO_ROOT := $(CURDIR)
 HELPERS_DIR := scripts/script-helpers
 HELPERS_SCRIPTS := $(HELPERS_DIR)/scripts
 PYTHON ?= python3
+DIRSYNC_SOURCES := $(shell find src -type f -name '*.py')
 
 REPO_SLUG ?= nikolareljin/dir-sync
 PPA ?=
@@ -19,7 +20,7 @@ BREW_TARBALL_URL ?= https://github.com/$(REPO_SLUG)/releases/download/v$(VERSION
 
 .DEFAULT_GOAL := help
 
-.PHONY: help check-submodule update lint test ci run clean build install uninstall \
+.PHONY: help check-submodule update deps lint test ci run clean build install uninstall \
 	package-init package-refresh deb rpm ppa ppa-dry brew brew-formula brew-publish \
 	package-all
 
@@ -28,6 +29,7 @@ help:
 	@echo ""
 	@echo "Core:"
 	@echo "  make update           Update git submodules"
+	@echo "  make deps             Install OS/runtime deps (includes tkinter)"
 	@echo "  make lint             Run lint checks"
 	@echo "  make test             Run unit tests"
 	@echo "  make ci               Run lint + tests"
@@ -64,6 +66,9 @@ check-submodule:
 update:
 	./scripts/update.sh
 
+deps: check-submodule
+	./scripts/install_deps.sh
+
 lint: check-submodule
 	./scripts/lint.sh
 
@@ -78,10 +83,21 @@ run:
 clean:
 	rm -rf build dist *.spec
 
-build: check-submodule
+build: dist/$(APP_NAME)
+
+dist/$(APP_NAME): scripts/build.sh pyproject.toml $(DIRSYNC_SOURCES)
+	@test -f "$(HELPERS_DIR)/helpers.sh" || { \
+		echo "Missing submodule: script-helpers"; \
+		echo "Run ./scripts/update.sh to set it up first."; \
+		exit 1; \
+	}
 	./scripts/build.sh
 
-install: build
+install:
+	@test -f "dist/$(APP_NAME)" || { \
+		echo "Missing dist/$(APP_NAME). Run 'make build' first."; \
+		exit 1; \
+	}
 	install -d "$(DESTDIR)$(PREFIX)/bin"
 	install -m 0755 "dist/$(APP_NAME)" "$(DESTDIR)$(PREFIX)/bin/$(APP_NAME)"
 
