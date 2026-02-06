@@ -61,10 +61,11 @@ class ConfigWindow:
         )
 
         def populate_drive_fields():
-            drives = [p.mountpoint for p in psutil.disk_partitions(all=False)]
+            drives = list(psutil.disk_partitions(all=False))
             if drives:
-                src_path_var.set(drives[0])
-                dst_path_var.set(drives[-1])
+                src_path_var.set(drives[0].mountpoint)
+                dst_path_var.set(drives[-1].mountpoint)
+                dst_device_id_var.set(drives[-1].device)
 
         tk.Button(root, text="Detect Drives", command=populate_drive_fields).grid(
             row=3, column=0, sticky="w", padx=5
@@ -73,6 +74,8 @@ class ConfigWindow:
         method_var = tk.StringVar(value=action.method)
         action_type_var = tk.StringVar(value=action.action_type)
         schedule_var = tk.StringVar(value=action.schedule or "")
+        dst_device_id_var = tk.StringVar(value=action.dst_device_id or "")
+        dst_path_on_device_var = tk.StringVar(value=action.dst_path_on_device or "")
 
         method_menu = ttk.OptionMenu(root, method_var, action.method, *SUPPORTED_METHODS)
         method_menu.grid(row=4, column=0, sticky="ew", padx=5)
@@ -84,11 +87,25 @@ class ConfigWindow:
         )
         action_type_menu.grid(row=4, column=1, sticky="ew", padx=5)
 
-        tk.Label(root, text="Cron expression (for automated schedule)").grid(
+        tk.Label(root, text="Destination device ID (optional, for USB/HDD auto-match)").grid(
             row=5, column=0, columnspan=2, sticky="w", padx=5
         )
+        tk.Entry(root, textvariable=dst_device_id_var).grid(
+            row=6, column=0, columnspan=2, sticky="ew", padx=5
+        )
+
+        tk.Label(root, text="Destination path on device (optional, e.g. backups/photos)").grid(
+            row=7, column=0, columnspan=2, sticky="w", padx=5
+        )
+        tk.Entry(root, textvariable=dst_path_on_device_var).grid(
+            row=8, column=0, columnspan=2, sticky="ew", padx=5
+        )
+
+        tk.Label(root, text="Cron expression (for automated schedule)").grid(
+            row=9, column=0, columnspan=2, sticky="w", padx=5
+        )
         tk.Entry(root, textvariable=schedule_var).grid(
-            row=6,
+            row=10,
             column=0,
             columnspan=2,
             sticky="ew",
@@ -105,6 +122,8 @@ class ConfigWindow:
                 method=method_var.get(),
                 action_type=action_type_var.get(),
                 schedule=schedule_var.get().strip() or None,
+                dst_device_id=dst_device_id_var.get().strip() or None,
+                dst_path_on_device=dst_path_on_device_var.get().strip() or None,
             )
             if create:
                 self.manager.config.add_action(payload)
@@ -113,8 +132,8 @@ class ConfigWindow:
             self.manager.save()
             root.destroy()
 
-        tk.Button(root, text=button_text, command=on_submit).grid(row=7, column=0, padx=5, pady=10)
-        tk.Button(root, text="Cancel", command=root.destroy).grid(row=7, column=1, padx=5, pady=10)
+        tk.Button(root, text=button_text, command=on_submit).grid(row=11, column=0, padx=5, pady=10)
+        tk.Button(root, text="Cancel", command=root.destroy).grid(row=11, column=1, padx=5, pady=10)
 
         root.mainloop()
 

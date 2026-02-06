@@ -46,7 +46,11 @@ class ToolbarController:
 
     def _build_menu(self):
         run_items = [
-            pystray.MenuItem(action.name, self._make_runner(action))
+            pystray.MenuItem(self._action_label(action), self._make_runner(action))
+            for action in self.manager.config.actions
+        ]
+        run_src_to_dst_items = [
+            pystray.MenuItem(self._action_label(action), self._make_source_runner(action))
             for action in self.manager.config.actions
         ]
         edit_items = [
@@ -55,10 +59,13 @@ class ToolbarController:
         ]
         placeholder = pystray.MenuItem("No actions", lambda icon, item: None, enabled=False)
         run_menu = pystray.Menu(*(run_items or [placeholder]))
+        run_source_menu = pystray.Menu(*(run_src_to_dst_items or [placeholder]))
         edit_menu = pystray.Menu(*(edit_items or [placeholder]))
 
         menu = pystray.Menu(
-            pystray.MenuItem("Run", run_menu),
+            pystray.MenuItem("Run configured", run_menu),
+            pystray.MenuItem("Run source -> destination", run_source_menu),
+            pystray.MenuItem("Run all changed dirs", lambda icon, item: self._run_all_changed()),
             pystray.MenuItem("Add new action", lambda icon, item: self._open_creator()),
             pystray.MenuItem("Modify action", edit_menu),
             pystray.MenuItem("Export", lambda icon, item: self._export_config()),
@@ -80,6 +87,12 @@ class ToolbarController:
 
         return _edit
 
+    def _make_source_runner(self, action: SyncAction) -> Callable:
+        def _runner(icon, item):
+            threading.Thread(target=self._run_source_action, args=(action,), daemon=True).start()
+
+        return _runner
+
     def _open_creator(self):
         self.config_window.add_action()
         self.refresh()
@@ -87,8 +100,33 @@ class ToolbarController:
     def _run_action(self, action: SyncAction):
         try:
             self.executor.run_action(action)
+            self.refresh()
         except Exception as exc:  # pragma: no cover - surfaced via notification
             self.notifier.error(str(exc))
+
+    def _run_source_action(self, action: SyncAction):
+        try:
+            self.executor.run_source_to_destination(action)
+            self.notifier.success(f"Action '{action.name}' completed")
+            self.refresh()
+        except Exception as exc:  # pragma: no cover - surfaced via notification
+            self.notifier.error(str(exc))
+
+    def _run_all_changed(self):
+        threading.Thread(target=self._run_changed_thread, daemon=True).start()
+
+    def _run_changed_thread(self):
+        changed = self.executor.pending_actions(self.manager.config.actions)
+        if not changed:
+            self.notifier.success("No source changes detected")
+            return
+        for action in changed:
+            self._run_source_action(action)
+
+    def _action_label(self, action: SyncAction) -> str:
+        has_changes = self.executor.has_pending_source_changes(action)
+        marker = "changes pending" if has_changes else "up-to-date"
+        return f"{action.name} [{marker}]"
 
     def _export_config(self):
         EXPORT_DIR.mkdir(parents=True, exist_ok=True)
