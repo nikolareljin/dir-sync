@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import tkinter as tk
+from pathlib import Path
 from tkinter import filedialog, ttk
 
 import psutil
@@ -70,6 +71,11 @@ class ConfigWindow:
         tk.Button(root, text="Detect Drives", command=populate_drive_fields).grid(
             row=3, column=0, sticky="w", padx=5
         )
+        tk.Button(
+            root,
+            text="List USB IDs",
+            command=lambda: self._open_usb_picker(root, dst_device_id_var, dst_path_var),
+        ).grid(row=3, column=1, sticky="e", padx=5)
 
         method_var = tk.StringVar(value=action.method)
         action_type_var = tk.StringVar(value=action.action_type)
@@ -141,3 +147,105 @@ class ConfigWindow:
         path = filedialog.askdirectory()
         if path:
             variable.set(path)
+
+    def _open_usb_picker(
+        self,
+        parent: tk.Tk,
+        dst_device_id_var: tk.StringVar,
+        dst_path_var: tk.StringVar,
+    ) -> None:
+        drives = self._discover_drives()
+        usb_drives = [drive for drive in drives if drive["removable"]]
+        if not usb_drives:
+            return
+
+        dialog = tk.Toplevel(parent)
+        dialog.title("Detected USB/HDD IDs")
+        dialog.geometry("760x260")
+
+        columns = ("volume_id", "device", "mountpoint")
+        tree = ttk.Treeview(dialog, columns=columns, show="headings", height=8)
+        tree.heading("volume_id", text="Device ID")
+        tree.heading("device", text="Device")
+        tree.heading("mountpoint", text="Mountpoint")
+        tree.column("volume_id", width=180)
+        tree.column("device", width=180)
+        tree.column("mountpoint", width=360)
+        tree.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=8, pady=8)
+
+        for drive in usb_drives:
+            tree.insert(
+                "",
+                "end",
+                values=(drive["volume_id"], drive["device"], drive["mountpoint"]),
+            )
+
+        def apply_selected():
+            selection = tree.selection()
+            if not selection:
+                return
+            volume_id, _, mountpoint = tree.item(selection[0], "values")
+            dst_device_id_var.set(volume_id)
+            if not dst_path_var.get().strip():
+                dst_path_var.set(mountpoint)
+            dialog.destroy()
+
+        ttk.Button(dialog, text="Use Selected", command=apply_selected).grid(
+            row=1, column=0, sticky="w", padx=8, pady=8
+        )
+        ttk.Button(dialog, text="Close", command=dialog.destroy).grid(
+            row=1, column=1, sticky="e", padx=8, pady=8
+        )
+
+        dialog.grid_rowconfigure(0, weight=1)
+        dialog.grid_columnconfigure(0, weight=1)
+        dialog.grid_columnconfigure(1, weight=1)
+
+    def _discover_drives(self) -> list[dict[str, str | bool]]:
+        discovered: list[dict[str, str | bool]] = []
+        for part in psutil.disk_partitions(all=False):
+            mountpoint = part.mountpoint.rstrip("/\\")
+            device = part.device
+            discovered.append(
+                {
+                    "mountpoint": mountpoint,
+                    "device": device,
+                    "volume_id": self._resolve_volume_id(device),
+                    "removable": self._is_removable(device),
+                }
+            )
+        return discovered
+
+    def _resolve_volume_id(self, device: str) -> str:
+        if not device:
+            return ""
+        by_uuid = Path("/dev/disk/by-uuid")
+        resolved = Path(device).resolve()
+        if by_uuid.exists():
+            for entry in by_uuid.iterdir():
+                try:
+                    if entry.resolve() == resolved:
+                        return entry.name
+                except OSError:
+                    continue
+        return device
+
+    def _is_removable(self, device: str) -> bool:
+        if not device.startswith("/dev/"):
+            return False
+
+        leaf = Path(device).name
+        candidates = [leaf]
+        if leaf and leaf[-1].isdigit():
+            candidates.append(leaf.rstrip("0123456789"))
+            candidates.append(leaf.rstrip("0123456789p"))
+
+        for name in candidates:
+            sys_path = Path("/sys/class/block") / name / "removable"
+            if not sys_path.exists():
+                continue
+            try:
+                return sys_path.read_text(encoding="utf-8").strip() == "1"
+            except OSError:
+                return False
+        return False

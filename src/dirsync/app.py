@@ -3,16 +3,16 @@ from __future__ import annotations
 import logging
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import typer
 
-from .config import ConfigManager
-from .detector import DriveDetector, MountedDrive
-from .notifications import Notifier
-from .scheduler import ActionScheduler
-from .sync import SyncExecutor
-from .toolbar import ToolbarController
-from .ui_dialogs import confirm
+from dirsync.config import ConfigManager
+from dirsync.detector import DriveDetector, MountedDrive
+from dirsync.notifications import Notifier
+from dirsync.scheduler import ActionScheduler
+from dirsync.sync import SyncExecutor
+from dirsync.ui_dialogs import confirm
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 cli = typer.Typer(help="Dir Sync toolbar app")
@@ -23,11 +23,21 @@ class DirSyncApp:
         self.manager = ConfigManager()
         self.notifier = Notifier()
         self.executor = SyncExecutor(self.notifier)
-        self.toolbar = ToolbarController(
-            self.manager, self.executor, self.notifier, self._refresh_watchers
-        )
+        self.toolbar: Any = self._create_toolbar()
         self.scheduler = ActionScheduler(self.executor.run_action)
         self.detector = DriveDetector(self._handle_new_drive, self._handle_known_drive)
+
+    def _create_toolbar(self):
+        try:
+            from dirsync.toolbar import ToolbarController
+        except ModuleNotFoundError as exc:
+            if exc.name == "tkinter":
+                raise RuntimeError(
+                    "Tkinter is required for the tray UI. Install it (e.g. Debian/Ubuntu: "
+                    "'sudo apt install python3-tk') and rebuild dir-sync."
+                ) from exc
+            raise
+        return ToolbarController(self.manager, self.executor, self.notifier, self._refresh_watchers)
 
     def start(self):
         self.manager.ensure_default()
@@ -97,8 +107,12 @@ class DirSyncApp:
 @cli.command()
 def run():  # pragma: no cover - UI entrypoint
     """Start the toolbar application."""
-    app = DirSyncApp()
-    app.start()
+    try:
+        app = DirSyncApp()
+        app.start()
+    except RuntimeError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
 
 
 def main():  # pragma: no cover
