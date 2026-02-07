@@ -9,6 +9,7 @@ import psutil
 
 from .config import ConfigManager, SyncAction
 from .constants import SUPPORTED_ACTION_TYPES, SUPPORTED_METHODS
+from .ui_dialogs import alert
 
 
 class ConfigWindow:
@@ -34,32 +35,51 @@ class ConfigWindow:
     def _open(self, action: SyncAction, create: bool) -> None:
         root = tk.Tk()
         root.title(f"Dir Sync - {action.name}")
-        root.geometry("600x300")
+        root.geometry("760x470")
+        root.minsize(760, 470)
 
-        tk.Label(root, text="Action name").grid(row=0, column=0, columnspan=2, sticky="w")
+        style = ttk.Style(root)
+        for theme in ("vista", "xpnative", "aqua", "clam"):
+            if theme in style.theme_names():
+                style.theme_use(theme)
+                break
+
+        content = ttk.Frame(root, padding=12)
+        content.grid(row=0, column=0, sticky="nsew")
+        root.grid_columnconfigure(0, weight=1)
+        root.grid_rowconfigure(0, weight=1)
+
+        ttk.Label(content, text="Action name").grid(row=0, column=0, columnspan=2, sticky="w")
         name_var = tk.StringVar(value=action.name)
-        name_entry = tk.Entry(root, textvariable=name_var)
-        name_entry.grid(row=1, column=0, columnspan=2, sticky="ew", padx=5)
+        name_entry = ttk.Entry(content, textvariable=name_var)
+        name_entry.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(2, 8))
 
         # SRC pane
-        src_frame = ttk.LabelFrame(root, text="Source")
-        src_frame.grid(row=2, column=0, sticky="nsew", padx=5, pady=5)
+        src_frame = ttk.LabelFrame(content, text="Source", padding=8)
+        src_frame.grid(row=2, column=0, sticky="nsew", padx=(0, 6), pady=4)
         src_path_var = tk.StringVar(value=action.src_path)
-        tk.Label(src_frame, text="Directory").grid(row=0, column=0, sticky="w")
-        tk.Entry(src_frame, textvariable=src_path_var, width=30).grid(row=1, column=0, sticky="ew")
-        tk.Button(src_frame, text="Browse", command=lambda: self._choose_dir(src_path_var)).grid(
-            row=1, column=1
+        ttk.Label(src_frame, text="Directory").grid(row=0, column=0, sticky="w")
+        ttk.Entry(src_frame, textvariable=src_path_var).grid(row=1, column=0, sticky="ew")
+        ttk.Button(src_frame, text="Browse", command=lambda: self._choose_dir(src_path_var)).grid(
+            row=1, column=1, padx=(6, 0)
         )
+        src_frame.grid_columnconfigure(0, weight=1)
 
         # DST pane
-        dst_frame = ttk.LabelFrame(root, text="Destination")
-        dst_frame.grid(row=2, column=1, sticky="nsew", padx=5, pady=5)
+        dst_frame = ttk.LabelFrame(content, text="Destination", padding=8)
+        dst_frame.grid(row=2, column=1, sticky="nsew", padx=(6, 0), pady=4)
         dst_path_var = tk.StringVar(value=action.dst_path)
-        tk.Label(dst_frame, text="Directory").grid(row=0, column=0, sticky="w")
-        tk.Entry(dst_frame, textvariable=dst_path_var, width=30).grid(row=1, column=0, sticky="ew")
-        tk.Button(dst_frame, text="Browse", command=lambda: self._choose_dir(dst_path_var)).grid(
-            row=1, column=1
+        ttk.Label(dst_frame, text="Directory").grid(row=0, column=0, sticky="w")
+        ttk.Entry(dst_frame, textvariable=dst_path_var).grid(row=1, column=0, sticky="ew")
+        ttk.Button(dst_frame, text="Browse", command=lambda: self._choose_dir(dst_path_var)).grid(
+            row=1, column=1, padx=(6, 0)
         )
+        ttk.Button(
+            dst_frame,
+            text="Create Dir",
+            command=lambda: self._create_dir(dst_path_var),
+        ).grid(row=1, column=2, padx=(6, 0))
+        dst_frame.grid_columnconfigure(0, weight=1)
 
         def populate_drive_fields():
             drives = list(psutil.disk_partitions(all=False))
@@ -68,14 +88,19 @@ class ConfigWindow:
                 dst_path_var.set(drives[-1].mountpoint)
                 dst_device_id_var.set(drives[-1].device)
 
-        tk.Button(root, text="Detect Drives", command=populate_drive_fields).grid(
-            row=3, column=0, sticky="w", padx=5
+        button_row = ttk.Frame(content)
+        button_row.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(8, 6))
+        button_row.grid_columnconfigure(0, weight=1)
+        button_row.grid_columnconfigure(1, weight=1)
+
+        ttk.Button(button_row, text="Detect Drives", command=populate_drive_fields).grid(
+            row=0, column=0, sticky="w"
         )
-        tk.Button(
-            root,
+        ttk.Button(
+            button_row,
             text="List USB IDs",
             command=lambda: self._open_usb_picker(root, dst_device_id_var, dst_path_var),
-        ).grid(row=3, column=1, sticky="e", padx=5)
+        ).grid(row=0, column=1, sticky="e")
 
         method_var = tk.StringVar(value=action.method)
         action_type_var = tk.StringVar(value=action.action_type)
@@ -83,39 +108,38 @@ class ConfigWindow:
         dst_device_id_var = tk.StringVar(value=action.dst_device_id or "")
         dst_path_on_device_var = tk.StringVar(value=action.dst_path_on_device or "")
 
-        method_menu = ttk.OptionMenu(root, method_var, action.method, *SUPPORTED_METHODS)
-        method_menu.grid(row=4, column=0, sticky="ew", padx=5)
-        action_type_menu = ttk.OptionMenu(
-            root,
-            action_type_var,
-            action.action_type,
-            *SUPPORTED_ACTION_TYPES,
+        method_combo = ttk.Combobox(content, textvariable=method_var, values=SUPPORTED_METHODS)
+        method_combo.state(["readonly"])
+        method_combo.grid(row=4, column=0, sticky="ew", padx=(0, 6), pady=(0, 6))
+        action_type_combo = ttk.Combobox(
+            content, textvariable=action_type_var, values=SUPPORTED_ACTION_TYPES
         )
-        action_type_menu.grid(row=4, column=1, sticky="ew", padx=5)
+        action_type_combo.state(["readonly"])
+        action_type_combo.grid(row=4, column=1, sticky="ew", padx=(6, 0), pady=(0, 6))
 
-        tk.Label(root, text="Destination device ID (optional, for USB/HDD auto-match)").grid(
-            row=5, column=0, columnspan=2, sticky="w", padx=5
+        ttk.Label(content, text="Destination device ID (optional, for USB/HDD auto-match)").grid(
+            row=5, column=0, columnspan=2, sticky="w"
         )
-        tk.Entry(root, textvariable=dst_device_id_var).grid(
-            row=6, column=0, columnspan=2, sticky="ew", padx=5
-        )
-
-        tk.Label(root, text="Destination path on device (optional, e.g. backups/photos)").grid(
-            row=7, column=0, columnspan=2, sticky="w", padx=5
-        )
-        tk.Entry(root, textvariable=dst_path_on_device_var).grid(
-            row=8, column=0, columnspan=2, sticky="ew", padx=5
+        ttk.Entry(content, textvariable=dst_device_id_var).grid(
+            row=6, column=0, columnspan=2, sticky="ew", pady=(2, 8)
         )
 
-        tk.Label(root, text="Cron expression (for automated schedule)").grid(
-            row=9, column=0, columnspan=2, sticky="w", padx=5
+        ttk.Label(content, text="Destination path on device (optional, e.g. backups/photos)").grid(
+            row=7, column=0, columnspan=2, sticky="w"
         )
-        tk.Entry(root, textvariable=schedule_var).grid(
+        ttk.Entry(content, textvariable=dst_path_on_device_var).grid(
+            row=8, column=0, columnspan=2, sticky="ew", pady=(2, 8)
+        )
+
+        ttk.Label(content, text="Cron expression (for automated schedule)").grid(
+            row=9, column=0, columnspan=2, sticky="w"
+        )
+        ttk.Entry(content, textvariable=schedule_var).grid(
             row=10,
             column=0,
             columnspan=2,
             sticky="ew",
-            padx=5,
+            pady=(2, 8),
         )
 
         button_text = "Create" if create else "Save"
@@ -138,15 +162,35 @@ class ConfigWindow:
             self.manager.save()
             root.destroy()
 
-        tk.Button(root, text=button_text, command=on_submit).grid(row=11, column=0, padx=5, pady=10)
-        tk.Button(root, text="Cancel", command=root.destroy).grid(row=11, column=1, padx=5, pady=10)
+        action_buttons = ttk.Frame(content)
+        action_buttons.grid(row=11, column=0, columnspan=2, sticky="e", pady=(8, 0))
+        ttk.Button(action_buttons, text=button_text, command=on_submit).grid(
+            row=0, column=0, padx=(0, 8)
+        )
+        ttk.Button(action_buttons, text="Cancel", command=root.destroy).grid(row=0, column=1)
 
+        content.grid_columnconfigure(0, weight=1)
+        content.grid_columnconfigure(1, weight=1)
+
+        self._fit_window_to_content(root, min_width=760, min_height=440)
         root.mainloop()
 
     def _choose_dir(self, variable: tk.StringVar) -> None:
         path = filedialog.askdirectory()
         if path:
             variable.set(path)
+
+    def _create_dir(self, variable: tk.StringVar) -> None:
+        path = variable.get().strip()
+        if not path:
+            alert("Destination path is empty. Enter a path first.")
+            return
+        try:
+            Path(path).mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            alert(f"Could not create directory:\n{path}\n\n{exc}")
+            return
+        alert(f"Directory is ready:\n{path}")
 
     def _open_usb_picker(
         self,
@@ -249,3 +293,9 @@ class ConfigWindow:
             except OSError:
                 return False
         return False
+
+    def _fit_window_to_content(self, root: tk.Tk, min_width: int, min_height: int) -> None:
+        root.update_idletasks()
+        width = max(min_width, root.winfo_reqwidth() + 20)
+        height = max(min_height, root.winfo_reqheight() + 20)
+        root.geometry(f"{width}x{height}")
