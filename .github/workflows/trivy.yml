@@ -10,9 +10,14 @@ permissions:
 
 jobs:
   trivy:
-    uses: nikolareljin/ci-helpers/.github/workflows/trivy-scan.yml@production
-
-    with:
-      scan_path: "."
-      fail_on_findings: true
-      upload_artifact: true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run trivy scan
+        uses: nikolareljin/ci-helpers/.github/actions/trivy-scan@production
+        with:
+          scan_path: "."
+          fail_on_findings: true
+          upload_artifact: true
