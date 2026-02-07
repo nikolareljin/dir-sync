@@ -8,6 +8,7 @@
 
 ## Environment Setup
 ```bash
+make deps
 python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\\Scripts\\activate
 pip install --upgrade pip
@@ -22,14 +23,32 @@ The toolbar icon appears in your system tray. Use the menu to add sync actions, 
 
 ## Packaging
 ```bash
-pip install pyinstaller
-pyinstaller --name dir-sync --onefile --windowed src/dirsync/app.py
+make build
 ```
-Artifacts land in `dist/`. Repeat on Linux/macOS/Windows to create native binaries (GitHub Actions workflows do this automatically when tags are pushed).
+Artifacts land in `dist/`. Repeat on Linux/macOS/Windows to create native binaries (GitHub Actions workflows build platform-native artifacts from tags).
 
-## Containerized Build
-If you prefer Docker (or want to avoid installing build dependencies locally), run:
+## Cross-Distro Packaging
+The repo includes packaging metadata plus helper targets for Debian, Launchpad PPA, RPM, and Homebrew.
+
 ```bash
-./scripts/build_in_docker.sh
+# one-time scaffold refresh from packaging/packaging.env
+make package-refresh
+
+# build package artifacts
+make deb
+make rpm
+make brew
 ```
-This uses the `python:3.11-slim` image, installs project dependencies plus PyInstaller inside the container, and writes the resulting binary to your local `dist/` directory.
+
+PPA upload requires your Launchpad target and signing key:
+
+```bash
+make ppa-dry-run PPA=ppa:<owner>/<name> PPA_KEY_ID=<gpg-key-id>
+make ppa PPA=ppa:<owner>/<name> PPA_KEY_ID=<gpg-key-id>
+```
+
+Homebrew tap publishing:
+
+```bash
+make brew-publish BREW_TAP_REPO=<owner>/<homebrew-tap-repo>
+```

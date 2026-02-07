@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import fnmatch
 import logging
+import os
 import shutil
 import subprocess
+from hashlib import sha1
 from pathlib import Path
-from typing import Iterable, List
+from typing import Iterable, List, Sequence
 
 from .config import SyncAction
 from .constants import IS_WINDOWS
@@ -35,12 +37,22 @@ class SyncExecutor:
             outputs.append(
                 self._run_one_way(action.src_path, action.dst_path, action, soft_run=soft_run)
             )
+
         if soft_run:
             combined = "\n".join([o for o in outputs if o]).strip()
             message = combined if combined else f"Preview for '{action.name}' completed"
             self.notifier.prompt("Dir Sync preview", message[:500])
-        else:
-            self.notifier.success(f"Action '{action.name}' completed")
+            return
+
+        self.notifier.success(f"Action '{action.name}' completed")
+
+    def run_source_to_destination(self, action: SyncAction, soft_run: bool = False) -> None:
+        output = self._run_one_way(action.src_path, action.dst_path, action, soft_run=soft_run)
+        if soft_run:
+            preview = output or f"Preview for '{action.name}' completed"
+            self.notifier.prompt("Dir Sync preview", preview[:500])
+            return
+        self.notifier.success(f"Action '{action.name}' completed")
 
     def _run_one_way(
         self, src: str, dst: str, action: SyncAction, reverse: bool = False, soft_run: bool = False
@@ -64,7 +76,7 @@ class SyncExecutor:
                 cmd.extend(["--exclude", pattern])
             cmd.extend([f"{src_path}/", f"{dst_path}/"])
             return self._run_command(cmd, label, soft_run)
-        elif self.robocopy_path:
+        if self.robocopy_path:
             cmd = [
                 "robocopy",
                 str(src_path),
@@ -78,12 +90,12 @@ class SyncExecutor:
             if soft_run:
                 cmd.append("/L")
             return self._run_command(cmd, label, soft_run)
-        else:
-            if soft_run:
-                return "Soft run not available without rsync/robocopy; install rsync to preview."
-            self.logger.warning("rsync not available; falling back to shutil copy")
-            self._python_copy(src_path, dst_path, action.includes, action.excludes)
-            return ""
+
+        if soft_run:
+            return "Soft run not available without rsync/robocopy; install rsync to preview."
+        self.logger.warning("rsync not available; falling back to shutil copy")
+        self._python_copy(src_path, dst_path, action.includes, action.excludes)
+        return ""
 
     def _run_command(self, cmd: Iterable[str], label: str, soft_run: bool = False) -> str:
         self.logger.info("Running %s", " ".join(cmd))
@@ -94,8 +106,7 @@ class SyncExecutor:
             alert(f"Sync failed for {label}: {result.stderr}")
             raise RuntimeError(result.stderr)
         if soft_run:
-            preview = result.stdout.strip() or f"{label} dry run completed"
-            return preview
+            return result.stdout.strip() or f"{label} dry run completed"
         return ""
 
     def _python_copy(
@@ -120,3 +131,56 @@ class SyncExecutor:
             else:
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(item, target)
+
+    def has_pending_source_changes(self, action: SyncAction) -> bool:
+        src = Path(action.src_path)
+        dst = Path(action.dst_path)
+        if not src.exists():
+            return False
+        if not dst.exists():
+            return True
+        if self.rsync_path:
+            return self._rsync_has_pending(src, dst)
+        return self._fallback_has_pending(src, dst)
+
+    def pending_actions(self, actions: Sequence[SyncAction]) -> list[SyncAction]:
+        return [action for action in actions if self.has_pending_source_changes(action)]
+
+    def _rsync_has_pending(self, src: Path, dst: Path) -> bool:
+        cmd = [self.rsync_path, "-ani", "--delete", f"{src}/", f"{dst}/"]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        if result.returncode != 0:
+            self.logger.warning("Could not evaluate pending changes: %s", result.stderr.strip())
+            return True
+        lines = [line for line in result.stdout.splitlines() if line.strip()]
+        return bool(lines)
+
+    def _fallback_has_pending(self, src: Path, dst: Path) -> bool:
+        src_files = self._snapshot(src)
+        dst_files = self._snapshot(dst)
+        if set(src_files.keys()) != set(dst_files.keys()):
+            return True
+        for key, src_meta in src_files.items():
+            if src_meta != dst_files.get(key):
+                return True
+        return False
+
+    def _snapshot(self, root: Path) -> dict[str, tuple[int, str]]:
+        snapshot: dict[str, tuple[int, str]] = {}
+        for path in root.rglob("*"):
+            if not path.is_file():
+                continue
+            rel = os.fspath(path.relative_to(root))
+            stat = path.stat()
+            snapshot[rel] = (stat.st_size, self._file_hash(path))
+        return snapshot
+
+    def _file_hash(self, path: Path) -> str:
+        digest = sha1()
+        with path.open("rb") as handle:
+            while True:
+                chunk = handle.read(65536)
+                if not chunk:
+                    break
+                digest.update(chunk)
+        return digest.hexdigest()

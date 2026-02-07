@@ -2,105 +2,78 @@
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT_HELPERS_DIR="${SCRIPT_HELPERS_DIR:-$SCRIPT_DIR/script-helpers}"
+if [[ ! -f "$SCRIPT_HELPERS_DIR/helpers.sh" ]]; then
+  echo "Missing submodule: script-helpers" >&2
+  echo "Run ./scripts/update.sh to set it up first." >&2
+  exit 1
+fi
 # shellcheck source=/dev/null
 source "$SCRIPT_HELPERS_DIR/helpers.sh"
 shlib_import logging
 
+PYTHON_BIN="${PYTHON:-}"
+if [[ -z "$PYTHON_BIN" ]]; then
+  if command -v python3 >/dev/null 2>&1; then
+    PYTHON_BIN="python3"
+  elif command -v python >/dev/null 2>&1; then
+    PYTHON_BIN="python"
+  else
+    echo "Python interpreter not found. Install python3 or set PYTHON." >&2
+    exit 1
+  fi
+fi
+
 print_info "Building standalone executable via PyInstaller"
+print_info "Ensuring required Python modules are available"
 
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-DEFAULT_VENV="$PROJECT_ROOT/.venv"
-FALLBACK_VENV="${PYINSTALLER_VENV:-$PROJECT_ROOT/.pyinstaller-venv}"
-ENTRY_SCRIPT="$PROJECT_ROOT/scripts/pyinstaller_entry.py"
-if [ ! -f "$ENTRY_SCRIPT" ]; then
-  log_error "Missing PyInstaller entry script at $ENTRY_SCRIPT"
-  exit 1
-fi
-
-# Determine which virtualenv provides project dependencies.
-if [[ -n "${VIRTUAL_ENV:-}" && -x "$VIRTUAL_ENV/bin/python" ]]; then
-  DEP_ENV="$VIRTUAL_ENV"
-elif [[ -x "$DEFAULT_VENV/bin/python" ]]; then
-  DEP_ENV="$DEFAULT_VENV"
-else
-  log_error "No virtual environment detected. Create one via docs/BUILD.md before building."
-  exit 1
-fi
-
-DEP_PYTHON="$DEP_ENV/bin/python"
-log_info "Using project environment at $DEP_ENV for dependencies"
-
-MISSING_MODULES="$("$DEP_PYTHON" - <<'PY'
-import importlib.util
-
-missing = []
-for name in ("typer", "pystray", "PIL", "plyer", "croniter", "yaml", "psutil"):
-    if importlib.util.find_spec(name) is None:
-        missing.append(name)
-
-if missing:
-    print(" ".join(missing))
-PY
-)"
-
-if [[ -n "${MISSING_MODULES// }" ]]; then
-  log_error "Missing required packages in $DEP_ENV: $MISSING_MODULES"
-  log_error "Activate the environment and run: pip install -e .[dev]   (see docs/BUILD.md)."
-  exit 1
-fi
-
-# Bring PyInstaller into the dependency environment (or borrow it from fallback).
-PYINSTALLER_PYTHON="$DEP_PYTHON"
-EXTRA_IMPORT_PATHS=()
-if ! "$PYINSTALLER_PYTHON" -m PyInstaller --version >/dev/null 2>&1; then
-  FALLBACK_PYTHON="$FALLBACK_VENV/bin/python"
-  if [ ! -d "$FALLBACK_VENV" ]; then
-    log_warn "PyInstaller not found; creating helper env at $FALLBACK_VENV"
-    python -m venv "$FALLBACK_VENV"
+ensure_module() {
+  local module_name="$1"
+  local pip_name="$2"
+  if "$PYTHON_BIN" -c "import importlib.util,sys; sys.exit(0 if importlib.util.find_spec('${module_name}') else 1)" >/dev/null 2>&1; then
+    return 0
   fi
+  log_warn "Missing Python module: ${module_name} (installing ${pip_name})"
+  "$PYTHON_BIN" -m pip install --user "$pip_name"
+}
 
-  if ! "$FALLBACK_PYTHON" -m PyInstaller --version >/dev/null 2>&1; then
-    log_warn "Installing PyInstaller into $FALLBACK_VENV"
-    if ! "$FALLBACK_PYTHON" -m pip install --upgrade pip >/dev/null; then
-      log_error "Failed to upgrade pip inside $FALLBACK_VENV"
+ensure_module "croniter" "croniter>=1.4"
+ensure_module "PIL" "pillow>=10.0"
+ensure_module "plyer" "plyer>=2.1"
+ensure_module "psutil" "psutil>=5.9"
+ensure_module "pystray" "pystray>=0.19"
+ensure_module "yaml" "pyyaml>=6.0"
+ensure_module "typer" "typer>=0.12"
+
+if ! "$PYTHON_BIN" -c "import tkinter" >/dev/null 2>&1; then
+  log_warn "tkinter is missing for $PYTHON_BIN"
+  print_info "Attempting to install OS dependencies automatically"
+  if "$SCRIPT_DIR/install_deps.sh"; then
+    if ! "$PYTHON_BIN" -c "import tkinter" >/dev/null 2>&1; then
+      echo "tkinter is still missing after dependency install." >&2
+      echo "Install python3-tk manually and rebuild." >&2
       exit 1
     fi
-    if ! "$FALLBACK_PYTHON" -m pip install pyinstaller >/dev/null; then
-      log_error "Unable to install PyInstaller (requires network connectivity once)."
-      exit 1
-    fi
+    print_success "tkinter dependency installed successfully."
+  else
+    echo "Automatic dependency installation failed." >&2
+    echo "Run ./scripts/install_deps.sh manually and rebuild." >&2
+    exit 1
   fi
-
-  FALLBACK_SITE_PACKAGES="$("$FALLBACK_PYTHON" - <<'PY'
-import sysconfig
-print(sysconfig.get_paths()["purelib"])
-PY
-)"
-  EXTRA_IMPORT_PATHS+=("$FALLBACK_SITE_PACKAGES")
-  log_warn "Borrowing PyInstaller from $FALLBACK_VENV"
 fi
 
-# Always ensure the project source directory is at the front of sys.path.
-EXTRA_IMPORT_PATHS+=("$PROJECT_ROOT/src")
-
-PY_PATH="$(IFS=:; echo "${EXTRA_IMPORT_PATHS[*]}")"
-if [[ -n "${PYTHONPATH:-}" ]]; then
-  PY_PATH="$PY_PATH:$PYTHONPATH"
+if ! "$PYTHON_BIN" -c "import PyInstaller" >/dev/null 2>&1; then
+  log_warn "pyinstaller not found; installing temporarily"
+  "$PYTHON_BIN" -m pip install --user pyinstaller
 fi
 
-HIDDEN_IMPORTS=(
-  "plyer.platforms.linux"
-  "plyer.platforms.linux.notification"
-  "plyer.platforms.win.notification"
-  "plyer.platforms.macosx.notification"
-  "plyer.platforms.android.notification"
-)
-
-PYINSTALLER_ARGS=(--noconfirm --name dir-sync --windowed --onefile)
-for module in "${HIDDEN_IMPORTS[@]}"; do
-  PYINSTALLER_ARGS+=(--hidden-import "$module")
-done
-PYINSTALLER_ARGS+=("$ENTRY_SCRIPT")
-
-PYTHONPATH="$PY_PATH" "$PYINSTALLER_PYTHON" -m PyInstaller "${PYINSTALLER_ARGS[@]}"
+"$PYTHON_BIN" -m PyInstaller \
+  --clean \
+  --noconfirm \
+  --name dir-sync \
+  --windowed \
+  --onefile \
+  --hidden-import tkinter \
+  --hidden-import tkinter.filedialog \
+  --hidden-import tkinter.messagebox \
+  src/dirsync/app.py
 print_success "Artifacts available in dist/"

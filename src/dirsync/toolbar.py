@@ -50,15 +50,23 @@ class ToolbarController:
         self.on_config_change()
 
     def _setup_icon(self, icon: pystray.Icon):
-        # Ensure menu is attached once the icon is ready so right-click always shows it
         icon.menu = self._build_menu()
         icon.visible = True
-        # On some platforms left-click triggers the default action; make sure it opens the menu
         icon.update_menu()
 
     def _build_menu(self):
         run_items = [
             pystray.MenuItem(action.name, self._make_runner(action, soft_run=None))
+            for action in self.manager.config.actions
+        ]
+        run_src_to_dst_items = [
+            pystray.MenuItem(self._action_label(action), self._make_source_runner(action, soft_run=None))
+            for action in self.manager.config.actions
+        ]
+        soft_run_source_items = [
+            pystray.MenuItem(
+                self._action_label(action), self._make_source_runner(action, soft_run=True)
+            )
             for action in self.manager.config.actions
         ]
         edit_items = [
@@ -67,6 +75,8 @@ class ToolbarController:
         ]
         placeholder = pystray.MenuItem("No actions", lambda icon, item: None, enabled=False)
         run_menu = pystray.Menu(*(run_items or [placeholder]))
+        run_source_menu = pystray.Menu(*(run_src_to_dst_items or [placeholder]))
+        run_source_soft_menu = pystray.Menu(*(soft_run_source_items or [placeholder]))
         soft_run_menu = pystray.Menu(
             *(
                 [
@@ -106,6 +116,9 @@ class ToolbarController:
             pystray.MenuItem(run_label, run_menu),
             pystray.MenuItem("Soft run (per-action)", soft_run_menu),
             pystray.MenuItem("Run (force full sync)", full_run_menu),
+            pystray.MenuItem("Run source -> destination", run_source_menu),
+            pystray.MenuItem("Run source -> destination (soft)", run_source_soft_menu),
+            pystray.MenuItem("Run all changed dirs", lambda icon, item: self._run_all_changed()),
             pystray.MenuItem("Modify saved action", edit_menu),
             pystray.MenuItem("Export", lambda icon, item: self._export_config()),
             pystray.MenuItem("Import", lambda icon, item: self._import_config()),
@@ -128,6 +141,15 @@ class ToolbarController:
             self.refresh()
 
         return _edit
+
+    def _make_source_runner(self, action: SyncAction, soft_run: bool | None = None) -> Callable:
+        def _runner(icon, item):
+            effective_soft_run = self.soft_run_enabled if soft_run is None else soft_run
+            threading.Thread(
+                target=self._run_source_action, args=(action, effective_soft_run), daemon=True
+            ).start()
+
+        return _runner
 
     def _open_creator(self):
         self.config_window.add_action()
@@ -249,6 +271,17 @@ class ToolbarController:
         try:
             self.executor.run_action(action, soft_run=soft_run)
             self._mark_status(action.name, "done")
+            self.refresh()
+        except Exception as exc:  # pragma: no cover - surfaced via notification
+            self.notifier.error(str(exc))
+            self._mark_status(action.name, "error")
+
+    def _run_source_action(self, action: SyncAction, soft_run: bool):
+        self._mark_status(action.name, "running")
+        try:
+            self.executor.run_source_to_destination(action, soft_run=soft_run)
+            self._mark_status(action.name, "done")
+            self.refresh()
         except Exception as exc:  # pragma: no cover - surfaced via notification
             self.notifier.error(str(exc))
             self._mark_status(action.name, "error")
@@ -271,6 +304,22 @@ class ToolbarController:
             if not Path(action.dst_path).exists() or not Path(action.src_path).exists():
                 prefix = "[!]"
         return f"{prefix} {action.name}"
+
+    def _run_all_changed(self):
+        threading.Thread(target=self._run_changed_thread, daemon=True).start()
+
+    def _run_changed_thread(self):
+        changed = self.executor.pending_actions(self.manager.config.actions)
+        if not changed:
+            self.notifier.success("No source changes detected")
+            return
+        for action in changed:
+            self._run_source_action(action, soft_run=False)
+
+    def _action_label(self, action: SyncAction) -> str:
+        has_changes = self.executor.has_pending_source_changes(action)
+        marker = "changes pending" if has_changes else "up-to-date"
+        return f"{action.name} [{marker}]"
 
     def _export_config(self):
         EXPORT_DIR.mkdir(parents=True, exist_ok=True)

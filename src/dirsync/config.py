@@ -20,10 +20,14 @@ class SyncAction:
     schedule: Optional[str] = None  # cron format when action_type == scheduled
     includes: List[str] = field(default_factory=list)  # glob patterns to include
     excludes: List[str] = field(default_factory=list)  # glob patterns to exclude
+    dst_device_id: Optional[str] = None
+    dst_path_on_device: Optional[str] = None
 
     def normalize(self) -> "SyncAction":
         self.src_path = os.path.expanduser(self.src_path)
         self.dst_path = os.path.expanduser(self.dst_path)
+        self.dst_device_id = (self.dst_device_id or "").strip() or None
+        self.dst_path_on_device = (self.dst_path_on_device or "").strip() or None
         if self.method not in SUPPORTED_METHODS:
             raise ValueError(f"Unsupported method: {self.method}")
         if self.action_type not in SUPPORTED_ACTION_TYPES:
