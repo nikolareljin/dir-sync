@@ -11,6 +11,73 @@ import psutil
 from .constants import DRIVE_POLL_SECONDS
 
 
+def normalize_mountpoint(value: str) -> str:
+    try:
+        normalized = str(Path(value).resolve())
+    except Exception:
+        normalized = value
+    return normalized.rstrip("/\\")
+
+
+def is_pseudo_mount(part: psutil._common.sdiskpart) -> bool:
+    fstype = (part.fstype or "").lower()
+    normalized_mount = normalize_mountpoint(part.mountpoint)
+
+    skip_mounts = {
+        "/boot",
+        "/boot/efi",
+        "/home",
+    }
+    skip_types = {
+        "proc",
+        "sysfs",
+        "tmpfs",
+        "devtmpfs",
+        "devfs",
+        "overlay",
+        "autofs",
+        "squashfs",
+        "fusectl",
+        "debugfs",
+        "tracefs",
+        "securityfs",
+        "cgroup",
+        "cgroup2",
+        "binfmt_misc",
+        "pstore",
+        "efivarfs",
+        "mqueue",
+        "devpts",
+        "rpc_pipefs",
+        "nsfs",
+        "portal",
+    }
+    allowed_fuse = {"fuseblk", "fuse.ntfs", "fuse.sshfs"}
+
+    if normalized_mount in skip_mounts:
+        return True
+    if fstype in skip_types:
+        return True
+    if fstype.startswith("fuse.") and fstype not in allowed_fuse:
+        return True
+
+    skip_prefixes = (
+        "/snap/",
+        "/proc/",
+        "/sys/",
+        "/dev/",
+        "/run/snapd/",
+        "/run/docker/netns/",
+        "/run/user/",
+        "/var/snap/",
+    )
+    if any(normalized_mount.startswith(prefix.rstrip("/")) for prefix in skip_prefixes):
+        return True
+    if "/doc" in normalized_mount and "run/user" in normalized_mount:
+        return True
+    return False
+
+
 @dataclass(frozen=True)
 class MountedDrive:
     mountpoint: str
@@ -69,7 +136,7 @@ class DriveDetector:
         for part in psutil.disk_partitions(all=True):
             if not part.mountpoint:
                 continue
-            if self._is_pseudo_mount(part):
+            if is_pseudo_mount(part):
                 continue
             mountpoint = self._normalize(part.mountpoint)
             device = part.device
@@ -80,6 +147,9 @@ class DriveDetector:
                 is_removable=self._is_removable(device),
             )
         return mounts
+
+    def _is_pseudo_mount(self, part: psutil._common.sdiskpart) -> bool:
+        return is_pseudo_mount(part)
 
     def _resolve_volume_id(self, device: str) -> str:
         if not device:
@@ -121,69 +191,10 @@ class DriveDetector:
                 return False
         return False
 
-    def _is_pseudo_mount(self, part: psutil._common.sdiskpart) -> bool:
-        fstype = (part.fstype or "").lower()
-        mount = part.mountpoint
-
-        skip_mounts = {
-            "/boot",
-            "/boot/efi",
-            "/home",
-        }
-        skip_types = {
-            "proc",
-            "sysfs",
-            "tmpfs",
-            "devtmpfs",
-            "devfs",
-            "overlay",
-            "autofs",
-            "squashfs",
-            "fusectl",
-            "debugfs",
-            "tracefs",
-            "securityfs",
-            "cgroup",
-            "cgroup2",
-            "binfmt_misc",
-            "pstore",
-            "efivarfs",
-            "mqueue",
-            "devpts",
-            "rpc_pipefs",
-            "nsfs",
-            "portal",
-        }
-        allowed_fuse = {"fuseblk", "fuse.ntfs", "fuse.sshfs"}
-
-        normalized_mount = self._normalize(mount)
-
-        if normalized_mount in skip_mounts:
-            return True
-        if fstype in skip_types:
-            return True
-        if fstype.startswith("fuse.") and fstype not in allowed_fuse:
-            return True
-
-        skip_prefixes = (
-            "/snap/",
-            "/proc/",
-            "/sys/",
-            "/dev/",
-            "/run/snapd/",
-            "/run/docker/netns/",
-            "/run/user/",
-            "/var/snap/",
-        )
-        if any(mount.startswith(prefix) for prefix in skip_prefixes):
-            return True
-        if "/doc" in mount and "run/user" in mount:
-            return True
-        return False
-
-    def _has_registered_target_on_mount(self, drive: MountedDrive) -> bool:
+    def _has_registered_target_on_mount(self, drive: MountedDrive | str) -> bool:
+        mountpoint = drive.mountpoint if isinstance(drive, MountedDrive) else drive
         for target in self.registered_targets:
-            if self._is_target_on_mount(target, drive.mountpoint):
+            if self._is_target_on_mount(target, mountpoint):
                 return True
         return False
 
@@ -198,8 +209,4 @@ class DriveDetector:
             return norm_target.startswith(norm_mount)
 
     def _normalize(self, value: str) -> str:
-        try:
-            normalized = str(Path(value).resolve())
-        except Exception:
-            normalized = value
-        return normalized.rstrip("/\\")
+        return normalize_mountpoint(value)

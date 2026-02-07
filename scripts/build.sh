@@ -33,7 +33,11 @@ ensure_module() {
     return 0
   fi
   log_warn "Missing Python module: ${module_name} (installing ${pip_name})"
-  "$PYTHON_BIN" -m pip install --user "$pip_name"
+  if "$PYTHON_BIN" -c 'import sys; raise SystemExit(0 if sys.prefix != getattr(sys, "base_prefix", sys.prefix) else 1)' >/dev/null 2>&1; then
+    "$PYTHON_BIN" -m pip install "$pip_name"
+  else
+    "$PYTHON_BIN" -m pip install --user "$pip_name"
+  fi
 }
 
 ensure_module "croniter" "croniter>=1.4"
@@ -63,7 +67,11 @@ fi
 
 if ! "$PYTHON_BIN" -c "import PyInstaller" >/dev/null 2>&1; then
   log_warn "pyinstaller not found; installing temporarily"
-  "$PYTHON_BIN" -m pip install --user pyinstaller
+  if "$PYTHON_BIN" -c 'import sys; raise SystemExit(0 if sys.prefix != getattr(sys, "base_prefix", sys.prefix) else 1)' >/dev/null 2>&1; then
+    "$PYTHON_BIN" -m pip install pyinstaller
+  else
+    "$PYTHON_BIN" -m pip install --user pyinstaller
+  fi
 fi
 
 "$PYTHON_BIN" -m PyInstaller \

@@ -6,7 +6,7 @@ import time
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog
-from typing import Callable
+from typing import Callable, TypedDict
 
 import pystray
 from PIL import Image, ImageDraw
@@ -17,6 +17,11 @@ from .notifications import Notifier
 from .sync import SyncExecutor
 from .ui_config import ConfigWindow
 from .ui_dialogs import alert
+
+
+class ActionStatus(TypedDict):
+    state: str
+    ts: float
 
 
 class ToolbarController:
@@ -33,7 +38,7 @@ class ToolbarController:
         self.config_window = ConfigWindow(manager)
         self.on_config_change = on_config_change
         self.soft_run_enabled = True
-        self.action_status: dict[str, dict[str, float]] = {}
+        self.action_status: dict[str, ActionStatus] = {}
         self.icon = pystray.Icon(
             "dir-sync", self._create_image(), "Dir Sync", menu=self._build_menu()
         )
@@ -60,7 +65,10 @@ class ToolbarController:
             for action in self.manager.config.actions
         ]
         run_src_to_dst_items = [
-            pystray.MenuItem(self._action_label(action), self._make_source_runner(action, soft_run=None))
+            pystray.MenuItem(
+                self._action_label(action),
+                self._make_source_runner(action, soft_run=None),
+            )
             for action in self.manager.config.actions
         ]
         soft_run_source_items = [
@@ -177,7 +185,7 @@ class ToolbarController:
                 listbox.insert(tk.END, label)
             if selected_name:
                 try:
-                    labels = self._formatted_action_names()
+                    labels = _formatted_action_names()
                     idx = next(
                         i for i, lbl in enumerate(labels) if _label_to_name(lbl) == selected_name
                     )
@@ -191,7 +199,7 @@ class ToolbarController:
             return [self._format_action_label(action) for action in self.manager.config.actions]
 
         def _label_to_name(label: str) -> str:
-            return label.split(" ", 1)[1] if " " in label else label
+            return label.split(" ", 1)[1].strip() if " " in label else label.strip()
 
         def selected_name() -> str | None:
             selection = listbox.curselection()

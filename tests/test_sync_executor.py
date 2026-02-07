@@ -291,7 +291,7 @@ class TestRobocopyCommandBuilding:
         assert "*.txt" in cmd
         assert "/XF" in cmd
         assert "*.log" in cmd
-        assert "/XD" in cmd
+        assert "/XD" not in cmd
 
     def test_robocopy_dry_run(self, tmp_path, monkeypatch):
         src = tmp_path / "src"

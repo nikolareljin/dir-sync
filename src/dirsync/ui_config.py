@@ -9,6 +9,7 @@ import psutil
 
 from .config import ConfigManager, SyncAction
 from .constants import SUPPORTED_ACTION_TYPES, SUPPORTED_METHODS
+from .detector import is_pseudo_mount, normalize_mountpoint
 from .ui_dialogs import alert
 
 
@@ -385,21 +386,13 @@ class ConfigWindow:
         dialog.grid_columnconfigure(1, weight=1)
 
     def _available_mounts(self) -> list[str]:
-        skip_mounts = {"/boot", "/boot/efi", "/home"}
-        skip_prefixes = ("/proc/", "/sys/", "/dev/", "/run/", "/var/snap/")
-        skip_types = {"proc", "sysfs", "tmpfs", "devtmpfs", "devfs", "overlay", "autofs"}
         drives = []
         for part in psutil.disk_partitions(all=True):
             if not part.mountpoint:
                 continue
-            if part.fstype and part.fstype.lower() in skip_types:
+            if is_pseudo_mount(part):
                 continue
-            mount = part.mountpoint.rstrip("/\\")
-            if mount in skip_mounts:
-                continue
-            if any(mount.startswith(prefix.rstrip("/")) for prefix in skip_prefixes):
-                continue
-            drives.append(mount)
+            drives.append(normalize_mountpoint(part.mountpoint))
         return drives
 
     def _discover_drives(self) -> list[dict[str, str | bool]]:

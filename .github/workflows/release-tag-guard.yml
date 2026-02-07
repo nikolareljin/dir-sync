@@ -18,5 +18,5 @@ jobs:
         uses: nikolareljin/ci-helpers/.github/actions/check-release-tag@production
 
         with:
-          release_branch: ${{ github.head_ref }}
+          release_branch: ${{ github.head_ref || github.ref_name }}
           fetch_tags: true

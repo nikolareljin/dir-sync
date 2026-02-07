@@ -59,43 +59,64 @@ class SyncExecutor:
     ) -> str:
         src_path = Path(src)
         dst_path = Path(dst)
+        created_for_preview = False
+        if soft_run and not dst_path.exists():
+            dst_path.mkdir(parents=True, exist_ok=True)
+            created_for_preview = True
         if not soft_run:
             dst_path.mkdir(parents=True, exist_ok=True)
         label = f"{action.name} ({'dst→src' if reverse else 'src→dst'})"
-        if self.rsync_path:
-            cmd = [
-                self.rsync_path,
-                "-avh",
-                "--delete",
-            ]
-            if soft_run:
-                cmd.extend(["--dry-run", "--stats"])
-            for pattern in action.includes:
-                cmd.extend(["--include", pattern])
-            for pattern in action.excludes:
-                cmd.extend(["--exclude", pattern])
-            cmd.extend([f"{src_path}/", f"{dst_path}/"])
-            return self._run_command(cmd, label, soft_run)
-        if self.robocopy_path:
-            cmd = [
-                "robocopy",
-                str(src_path),
-                str(dst_path),
-                "/MIR",
-            ]
-            if action.includes:
-                cmd.extend(action.includes)
-            if action.excludes:
-                cmd.extend(["/XF"] + action.excludes + ["/XD"] + action.excludes)
-            if soft_run:
-                cmd.append("/L")
-            return self._run_command(cmd, label, soft_run)
+        try:
+            if self.rsync_path:
+                cmd = [
+                    self.rsync_path,
+                    "-avh",
+                    "--delete",
+                ]
+                if soft_run:
+                    cmd.extend(["--dry-run", "--stats"])
+                for pattern in action.includes:
+                    cmd.extend(["--include", pattern])
+                for pattern in action.excludes:
+                    cmd.extend(["--exclude", pattern])
+                cmd.extend([f"{src_path}/", f"{dst_path}/"])
+                return self._run_command(cmd, label, soft_run)
+            if self.robocopy_path:
+                cmd = [
+                    "robocopy",
+                    str(src_path),
+                    str(dst_path),
+                    "/MIR",
+                ]
+                if action.includes:
+                    cmd.extend(action.includes)
+                if action.excludes:
+                    file_excludes: list[str] = []
+                    dir_excludes: list[str] = []
+                    for pattern in action.excludes:
+                        if "/" in pattern or "\\" in pattern:
+                            dir_excludes.append(pattern)
+                        else:
+                            file_excludes.append(pattern)
+                    if file_excludes:
+                        cmd.extend(["/XF"] + file_excludes)
+                    if dir_excludes:
+                        cmd.extend(["/XD"] + dir_excludes)
+                if soft_run:
+                    cmd.append("/L")
+                return self._run_command(cmd, label, soft_run)
 
-        if soft_run:
-            return "Soft run not available without rsync/robocopy; install rsync to preview."
-        self.logger.warning("rsync not available; falling back to shutil copy")
-        self._python_copy(src_path, dst_path, action.includes, action.excludes)
-        return ""
+            if soft_run:
+                return "Soft run not available without rsync/robocopy; install rsync to preview."
+            self.logger.warning("rsync not available; falling back to shutil copy")
+            self._python_copy(src_path, dst_path, action.includes, action.excludes)
+            return ""
+        finally:
+            if created_for_preview:
+                try:
+                    dst_path.rmdir()
+                except OSError:
+                    pass
 
     def _run_command(self, cmd: Iterable[str], label: str, soft_run: bool = False) -> str:
         self.logger.info("Running %s", " ".join(cmd))
@@ -120,7 +141,7 @@ class SyncExecutor:
             return any(fnmatch.fnmatch(rel, p) or fnmatch.fnmatch(name, p) for p in patterns)
 
         for item in src.rglob("*"):
-            rel = str(item.relative_to(src))
+            rel = item.relative_to(src).as_posix()
             if includes and not _matches(item.name, rel, includes):
                 continue
             if excludes and _matches(item.name, rel, excludes):
