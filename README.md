@@ -2,6 +2,13 @@
 
 Dir Sync is a cross-platform desktop companion that keeps directories mirrored through rsync-style actions. It lives in the system tray, lets you define reusable sync actions, watches for removable or network destinations, and surfaces notifications when jobs finish or devices appear.
 
+Think of it as an automated backup / rsync of your important directories.
+
+Setting up directories: 
+
+<img width="1270" height="918" alt="image" src="https://github.com/user-attachments/assets/8e96f02b-0dfa-413a-bf86-a75020a7a59e" />
+
+
 ## Features
 
 - System-tray controller with quick actions (run, add, modify, import/export configuration).
