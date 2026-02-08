@@ -30,22 +30,28 @@ if command -v apt-get >/dev/null 2>&1; then
   run_cmd sudo apt-get update
   run_cmd sudo apt-get install -y \
     python3 \
+    python3-gi \
     python3-pip \
     python3-venv \
     python3-tk \
+    libayatana-appindicator3-1 \
+    gir1.2-ayatanaappindicator3-0.1 \
     rsync
 elif command -v dnf >/dev/null 2>&1; then
   print_info "Installing dependencies with dnf"
   run_cmd sudo dnf install -y \
     python3 \
+    python3-gobject \
     python3-pip \
     python3-tkinter \
+    libappindicator-gtk3 \
     rsync
 elif command -v pacman >/dev/null 2>&1; then
   print_info "Installing dependencies with pacman"
   run_cmd sudo pacman -Sy --noconfirm \
     python \
     python-pip \
+    libappindicator-gtk3 \
     tk \
     rsync
 elif command -v brew >/dev/null 2>&1; then

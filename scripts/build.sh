@@ -13,6 +13,7 @@ shlib_import logging
 
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 BUILD_VENV="${BUILD_VENV:-$PROJECT_ROOT/.venv}"
+BUILD_VENV_SYSTEM="${BUILD_VENV_SYSTEM:-$PROJECT_ROOT/.venv-build-system}"
 PYTHON_BIN="${PYTHON:-}"
 if [[ -z "$PYTHON_BIN" ]]; then
   if [[ -x "$BUILD_VENV/bin/python" ]]; then
@@ -36,9 +37,6 @@ if ! "$PYTHON_BIN" -c 'import sys; raise SystemExit(0 if sys.prefix != getattr(s
   PYTHON_BIN="$BUILD_VENV/bin/python"
 fi
 
-print_info "Building standalone executable via PyInstaller"
-print_info "Ensuring required Python modules are available"
-
 ensure_module() {
   local module_name="$1"
   local pip_name="$2"
@@ -49,13 +47,19 @@ ensure_module() {
   "$PYTHON_BIN" -m pip install "$pip_name"
 }
 
-ensure_module "croniter" "croniter>=1.4"
-ensure_module "PIL" "pillow>=10.0"
-ensure_module "plyer" "plyer>=2.1"
-ensure_module "psutil" "psutil>=5.9"
-ensure_module "pystray" "pystray>=0.19"
-ensure_module "yaml" "pyyaml>=6.0"
-ensure_module "typer" "typer>=0.12"
+ensure_required_modules() {
+  print_info "Ensuring required Python modules are available for $PYTHON_BIN"
+  ensure_module "croniter" "croniter>=1.4"
+  ensure_module "PIL" "pillow>=10.0"
+  ensure_module "plyer" "plyer>=2.1"
+  ensure_module "psutil" "psutil>=5.9"
+  ensure_module "pystray" "pystray>=0.19"
+  ensure_module "yaml" "pyyaml>=6.0"
+  ensure_module "typer" "typer>=0.12"
+}
+
+print_info "Building standalone executable via PyInstaller"
+ensure_required_modules
 
 if ! "$PYTHON_BIN" -c "import tkinter" >/dev/null 2>&1; then
   log_warn "tkinter is missing for $PYTHON_BIN"
@@ -74,6 +78,24 @@ if ! "$PYTHON_BIN" -c "import tkinter" >/dev/null 2>&1; then
   fi
 fi
 
+if [[ "$(uname -s)" == "Linux" ]]; then
+  if ! "$PYTHON_BIN" -c "import gi" >/dev/null 2>&1; then
+    log_warn "PyGObject (gi) is not available for $PYTHON_BIN"
+    print_info "Attempting to install OS tray dependencies"
+    if ! "$SCRIPT_DIR/install_deps.sh"; then
+      log_warn "OS dependency auto-install failed; continuing with fallback checks"
+    fi
+  fi
+
+  if ! "$PYTHON_BIN" -c "import gi" >/dev/null 2>&1; then
+    log_warn "Current build interpreter still cannot import gi"
+    print_info "Creating Linux build venv with --system-site-packages at $BUILD_VENV_SYSTEM"
+    python3 -m venv --system-site-packages "$BUILD_VENV_SYSTEM"
+    PYTHON_BIN="$BUILD_VENV_SYSTEM/bin/python"
+    ensure_required_modules
+  fi
+fi
+
 if ! "$PYTHON_BIN" -c "import PyInstaller" >/dev/null 2>&1; then
   log_warn "pyinstaller not found; installing temporarily"
   "$PYTHON_BIN" -m pip install pyinstaller
@@ -85,6 +107,10 @@ fi
   --name dir-sync \
   --windowed \
   --onefile \
+  --collect-submodules plyer.platforms \
+  --hidden-import pystray._appindicator \
+  --hidden-import pystray._gtk \
+  --hidden-import pystray._xorg \
   --hidden-import tkinter \
   --hidden-import tkinter.filedialog \
   --hidden-import tkinter.messagebox \

@@ -28,8 +28,8 @@ class Notifier:
                 notification.notify(title=title, message=message, app_name=self.app_name)
             except NotImplementedError as exc:  # pragma: no cover - backend unavailable in CI
                 self.logger.warning("Notifications unavailable on this platform: %s", exc)
-            except Exception:  # pragma: no cover - defensive logging
-                self.logger.exception("Failed to deliver notification")
+            except Exception as exc:  # pragma: no cover - defensive logging
+                self.logger.warning("Failed to deliver notification: %s", exc)
 
     def success(self, message: str) -> None:
         self.send("Dir Sync", message)
