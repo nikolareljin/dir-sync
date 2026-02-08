@@ -44,7 +44,7 @@ class ToolbarController:
         )
 
     def run(self):
-        self.icon.run(setup=self._setup_icon)
+        self.icon.run()
 
     def stop(self):
         self.icon.stop()
@@ -53,11 +53,6 @@ class ToolbarController:
         self.icon.menu = self._build_menu()
         self.icon.update_menu()
         self.on_config_change()
-
-    def _setup_icon(self, icon: pystray.Icon):
-        icon.menu = self._build_menu()
-        icon.visible = True
-        icon.update_menu()
 
     def _build_menu(self):
         run_items = [
@@ -71,12 +66,6 @@ class ToolbarController:
             )
             for action in self.manager.config.actions
         ]
-        soft_run_source_items = [
-            pystray.MenuItem(
-                self._action_label(action), self._make_source_runner(action, soft_run=True)
-            )
-            for action in self.manager.config.actions
-        ]
         edit_items = [
             pystray.MenuItem(action.name, self._make_editor(action.name))
             for action in self.manager.config.actions
@@ -84,52 +73,14 @@ class ToolbarController:
         placeholder = pystray.MenuItem("No actions", lambda icon, item: None, enabled=False)
         run_menu = pystray.Menu(*(run_items or [placeholder]))
         run_source_menu = pystray.Menu(*(run_src_to_dst_items or [placeholder]))
-        run_source_soft_menu = pystray.Menu(*(soft_run_source_items or [placeholder]))
-        soft_run_menu = pystray.Menu(
-            *(
-                [
-                    pystray.MenuItem(action.name, self._make_runner(action, soft_run=True))
-                    for action in self.manager.config.actions
-                ]
-                or [placeholder]
-            )
-        )
         edit_menu = pystray.Menu(*(edit_items or [placeholder]))
 
-        full_run_menu = pystray.Menu(
-            *(
-                [
-                    pystray.MenuItem(action.name, self._make_runner(action, soft_run=False))
-                    for action in self.manager.config.actions
-                ]
-                or [placeholder]
-            )
-        )
-
-        run_label = "Run"
-        if self.soft_run_enabled:
-            run_label = "Run (soft run)"
         menu = pystray.Menu(
-            pystray.MenuItem(
-                "Open Dir Sync",
-                self._dispatch_ui_action(self._open_manager),
-                default=True,
-            ),
             pystray.MenuItem("Run configured", run_menu),
             pystray.MenuItem("Run source -> destination", run_source_menu),
             pystray.MenuItem("Run all changed dirs", lambda icon, item: self._run_all_changed()),
-            pystray.MenuItem("Add new action", self._dispatch_ui_action(self._open_creator)),
+            pystray.MenuItem("Add new action", lambda icon, item: self._open_creator()),
             pystray.MenuItem("Modify action", edit_menu),
-            pystray.MenuItem("Manage configurations", self._dispatch_ui_action(self._open_manager)),
-            pystray.MenuItem(
-                "Soft run (dry-run preview)",
-                self._toggle_soft_run,
-                checked=self._is_soft_run_checked,
-            ),
-            pystray.MenuItem(run_label, run_menu),
-            pystray.MenuItem("Soft run (per-action)", soft_run_menu),
-            pystray.MenuItem("Run (force full sync)", full_run_menu),
-            pystray.MenuItem("Run source -> destination (soft)", run_source_soft_menu),
             pystray.MenuItem("Export", lambda icon, item: self._export_config()),
             pystray.MenuItem("Import", lambda icon, item: self._import_config()),
             pystray.MenuItem("Quit", lambda icon, item: self.stop()),
@@ -147,7 +98,7 @@ class ToolbarController:
 
     def _make_editor(self, name: str) -> Callable:
         def _edit(icon, item):
-            self._safe_ui_action(lambda: self._edit_action(name))
+            self._edit_action(name)
 
         return _edit
 
@@ -167,18 +118,6 @@ class ToolbarController:
     def _edit_action(self, name: str):
         self.config_window.edit_action(name)
         self.refresh()
-
-    def _dispatch_ui_action(self, callback: Callable[[], None]) -> Callable:
-        def _runner(icon, item):
-            threading.Thread(target=self._safe_ui_action, args=(callback,), daemon=True).start()
-
-        return _runner
-
-    def _safe_ui_action(self, callback: Callable[[], None]) -> None:
-        try:
-            callback()
-        except Exception as exc:  # pragma: no cover - surfaced via notification
-            self.notifier.error(str(exc))
 
     def _open_manager(self):
         root = tk.Tk()
