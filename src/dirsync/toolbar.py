@@ -110,12 +110,15 @@ class ToolbarController:
         if self.soft_run_enabled:
             run_label = "Run (soft run)"
         menu = pystray.Menu(
+            pystray.MenuItem("Run configured", run_menu),
+            pystray.MenuItem("Run source -> destination", run_source_menu),
+            pystray.MenuItem("Run all changed dirs", lambda icon, item: self._run_all_changed()),
+            pystray.MenuItem("Add new action", lambda icon, item: self._open_creator()),
+            pystray.MenuItem("Modify action", edit_menu),
             pystray.MenuItem(
                 "Manage configurations",
                 lambda icon, item: self._open_manager(),
-                default=True,
             ),
-            pystray.MenuItem("Select directories to sync", lambda icon, item: self._open_creator()),
             pystray.MenuItem(
                 "Soft run (dry-run preview)",
                 self._toggle_soft_run,
@@ -124,10 +127,7 @@ class ToolbarController:
             pystray.MenuItem(run_label, run_menu),
             pystray.MenuItem("Soft run (per-action)", soft_run_menu),
             pystray.MenuItem("Run (force full sync)", full_run_menu),
-            pystray.MenuItem("Run source -> destination", run_source_menu),
             pystray.MenuItem("Run source -> destination (soft)", run_source_soft_menu),
-            pystray.MenuItem("Run all changed dirs", lambda icon, item: self._run_all_changed()),
-            pystray.MenuItem("Modify saved action", edit_menu),
             pystray.MenuItem("Export", lambda icon, item: self._export_config()),
             pystray.MenuItem("Import", lambda icon, item: self._import_config()),
             pystray.MenuItem("Quit", lambda icon, item: self.stop()),
