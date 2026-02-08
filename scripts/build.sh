@@ -11,9 +11,13 @@ fi
 source "$SCRIPT_HELPERS_DIR/helpers.sh"
 shlib_import logging
 
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+BUILD_VENV="${BUILD_VENV:-$PROJECT_ROOT/.venv}"
 PYTHON_BIN="${PYTHON:-}"
 if [[ -z "$PYTHON_BIN" ]]; then
-  if command -v python3 >/dev/null 2>&1; then
+  if [[ -x "$BUILD_VENV/bin/python" ]]; then
+    PYTHON_BIN="$BUILD_VENV/bin/python"
+  elif command -v python3 >/dev/null 2>&1; then
     PYTHON_BIN="python3"
   elif command -v python >/dev/null 2>&1; then
     PYTHON_BIN="python"
@@ -21,6 +25,15 @@ if [[ -z "$PYTHON_BIN" ]]; then
     echo "Python interpreter not found. Install python3 or set PYTHON." >&2
     exit 1
   fi
+fi
+
+# Avoid installing packages into externally-managed system Python (PEP 668).
+if ! "$PYTHON_BIN" -c 'import sys; raise SystemExit(0 if sys.prefix != getattr(sys, "base_prefix", sys.prefix) else 1)' >/dev/null 2>&1; then
+  if [[ ! -x "$BUILD_VENV/bin/python" ]]; then
+    log_warn "No virtualenv detected; creating build env at $BUILD_VENV"
+    "$PYTHON_BIN" -m venv "$BUILD_VENV"
+  fi
+  PYTHON_BIN="$BUILD_VENV/bin/python"
 fi
 
 print_info "Building standalone executable via PyInstaller"
@@ -33,11 +46,7 @@ ensure_module() {
     return 0
   fi
   log_warn "Missing Python module: ${module_name} (installing ${pip_name})"
-  if "$PYTHON_BIN" -c 'import sys; raise SystemExit(0 if sys.prefix != getattr(sys, "base_prefix", sys.prefix) else 1)' >/dev/null 2>&1; then
-    "$PYTHON_BIN" -m pip install "$pip_name"
-  else
-    "$PYTHON_BIN" -m pip install --user "$pip_name"
-  fi
+  "$PYTHON_BIN" -m pip install "$pip_name"
 }
 
 ensure_module "croniter" "croniter>=1.4"
@@ -67,11 +76,7 @@ fi
 
 if ! "$PYTHON_BIN" -c "import PyInstaller" >/dev/null 2>&1; then
   log_warn "pyinstaller not found; installing temporarily"
-  if "$PYTHON_BIN" -c 'import sys; raise SystemExit(0 if sys.prefix != getattr(sys, "base_prefix", sys.prefix) else 1)' >/dev/null 2>&1; then
-    "$PYTHON_BIN" -m pip install pyinstaller
-  else
-    "$PYTHON_BIN" -m pip install --user pyinstaller
-  fi
+  "$PYTHON_BIN" -m pip install pyinstaller
 fi
 
 "$PYTHON_BIN" -m PyInstaller \
