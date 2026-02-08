@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import copy
+import sys
 import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog, ttk
+from tkinter import filedialog, font as tkfont, scrolledtext, ttk
 
 import psutil
 
@@ -36,16 +37,12 @@ class ConfigWindow:
     def _open(self, action: SyncAction, create: bool) -> None:
         root = tk.Tk()
         root.title(f"Dir Sync - {action.name}")
-        root.geometry("860x700")
-        root.minsize(860, 650)
+        root.geometry("820x640")
+        root.minsize(760, 580)
 
-        style = ttk.Style(root)
-        for theme in ("vista", "xpnative", "aqua", "clam"):
-            if theme in style.theme_names():
-                style.theme_use(theme)
-                break
+        self._configure_native_style(root)
 
-        content = ttk.Frame(root, padding=12)
+        content = ttk.Frame(root, padding=(14, 12))
         content.grid(row=0, column=0, sticky="nsew")
         root.grid_columnconfigure(0, weight=1)
         root.grid_rowconfigure(0, weight=1)
@@ -76,7 +73,7 @@ class ConfigWindow:
         sched_dow_var = tk.StringVar(value=builder_parts[4])
 
         # SRC pane
-        src_frame = ttk.LabelFrame(content, text="Source", padding=8)
+        src_frame = ttk.LabelFrame(content, text="Source", padding=(10, 8))
         src_frame.grid(row=2, column=0, sticky="nsew", padx=(0, 6), pady=4)
         ttk.Label(src_frame, text="Directory").grid(row=0, column=0, sticky="w")
         ttk.Entry(src_frame, textvariable=src_path_var).grid(row=1, column=0, sticky="ew")
@@ -86,7 +83,7 @@ class ConfigWindow:
         src_frame.grid_columnconfigure(0, weight=1)
 
         # DST pane
-        dst_frame = ttk.LabelFrame(content, text="Destination", padding=8)
+        dst_frame = ttk.LabelFrame(content, text="Destination", padding=(10, 8))
         dst_frame.grid(row=2, column=1, sticky="nsew", padx=(6, 0), pady=4)
         ttk.Label(dst_frame, text="Directory").grid(row=0, column=0, sticky="w")
         ttk.Entry(dst_frame, textvariable=dst_path_var).grid(row=1, column=0, sticky="ew")
@@ -146,22 +143,42 @@ class ConfigWindow:
             row=8, column=0, columnspan=2, sticky="ew", pady=(2, 8)
         )
 
-        filter_frame = ttk.LabelFrame(content, text="File filters (one glob pattern per line)")
+        filter_frame = ttk.LabelFrame(
+            content,
+            text="File filters (one glob pattern per line)",
+            padding=(8, 6),
+        )
         filter_frame.grid(row=9, column=0, columnspan=2, sticky="nsew", pady=(2, 6))
         filter_frame.grid_columnconfigure(0, weight=1)
         filter_frame.grid_columnconfigure(1, weight=1)
 
         ttk.Label(filter_frame, text="Include patterns").grid(row=0, column=0, sticky="w", padx=4)
-        includes_text = tk.Text(filter_frame, height=4, width=30)
+        includes_text = scrolledtext.ScrolledText(
+            filter_frame,
+            height=5,
+            width=30,
+            wrap=tk.NONE,
+            font=tkfont.nametofont("TkTextFont"),
+            borderwidth=1,
+            relief=tk.SOLID,
+        )
         includes_text.grid(row=1, column=0, sticky="ew", padx=4, pady=(0, 4))
         includes_text.insert("1.0", "\n".join(action.includes))
 
         ttk.Label(filter_frame, text="Exclude patterns").grid(row=0, column=1, sticky="w", padx=4)
-        excludes_text = tk.Text(filter_frame, height=4, width=30)
+        excludes_text = scrolledtext.ScrolledText(
+            filter_frame,
+            height=5,
+            width=30,
+            wrap=tk.NONE,
+            font=tkfont.nametofont("TkTextFont"),
+            borderwidth=1,
+            relief=tk.SOLID,
+        )
         excludes_text.grid(row=1, column=1, sticky="ew", padx=4, pady=(0, 4))
         excludes_text.insert("1.0", "\n".join(action.excludes))
 
-        schedule_frame = ttk.LabelFrame(content, text="Schedule (cron)")
+        schedule_frame = ttk.LabelFrame(content, text="Schedule (cron)", padding=(8, 6))
         schedule_frame.grid(row=10, column=0, columnspan=2, sticky="nsew", pady=(2, 6))
         schedule_frame.grid_columnconfigure(0, weight=1)
         schedule_frame.grid_columnconfigure(1, weight=1)
@@ -311,7 +328,7 @@ class ConfigWindow:
         content.grid_columnconfigure(0, weight=1)
         content.grid_columnconfigure(1, weight=1)
 
-        self._fit_window_to_content(root, min_width=860, min_height=650)
+        self._fit_window_to_content(root, min_width=760, min_height=580)
         root.mainloop()
 
     def _choose_dir(self, variable: tk.StringVar) -> None:
@@ -449,3 +466,25 @@ class ConfigWindow:
         width = max(min_width, root.winfo_reqwidth() + 20)
         height = max(min_height, root.winfo_reqheight() + 20)
         root.geometry(f"{width}x{height}")
+
+    def _configure_native_style(self, root: tk.Tk) -> None:
+        style = ttk.Style(root)
+        themes = style.theme_names()
+        preferred_themes: list[str]
+        if sys.platform.startswith("win"):
+            preferred_themes = ["vista", "xpnative", "winnative", "default"]
+        elif sys.platform == "darwin":
+            preferred_themes = ["aqua", "default"]
+        else:
+            preferred_themes = ["default", "alt", "clam"]
+
+        for theme in preferred_themes:
+            if theme in themes:
+                style.theme_use(theme)
+                break
+
+        default_font = tkfont.nametofont("TkDefaultFont")
+        heading_font = default_font.copy()
+        heading_font.configure(weight="bold")
+        root.option_add("*Font", default_font)
+        style.configure("TLabelframe.Label", font=heading_font)
