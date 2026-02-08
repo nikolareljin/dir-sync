@@ -110,15 +110,17 @@ class ToolbarController:
         if self.soft_run_enabled:
             run_label = "Run (soft run)"
         menu = pystray.Menu(
+            pystray.MenuItem(
+                "Open Dir Sync",
+                self._dispatch_ui_action(self._open_manager),
+                default=True,
+            ),
             pystray.MenuItem("Run configured", run_menu),
             pystray.MenuItem("Run source -> destination", run_source_menu),
             pystray.MenuItem("Run all changed dirs", lambda icon, item: self._run_all_changed()),
-            pystray.MenuItem("Add new action", lambda icon, item: self._open_creator()),
+            pystray.MenuItem("Add new action", self._dispatch_ui_action(self._open_creator)),
             pystray.MenuItem("Modify action", edit_menu),
-            pystray.MenuItem(
-                "Manage configurations",
-                lambda icon, item: self._open_manager(),
-            ),
+            pystray.MenuItem("Manage configurations", self._dispatch_ui_action(self._open_manager)),
             pystray.MenuItem(
                 "Soft run (dry-run preview)",
                 self._toggle_soft_run,
@@ -145,8 +147,7 @@ class ToolbarController:
 
     def _make_editor(self, name: str) -> Callable:
         def _edit(icon, item):
-            self.config_window.edit_action(name)
-            self.refresh()
+            self._safe_ui_action(lambda: self._edit_action(name))
 
         return _edit
 
@@ -162,6 +163,22 @@ class ToolbarController:
     def _open_creator(self):
         self.config_window.add_action()
         self.refresh()
+
+    def _edit_action(self, name: str):
+        self.config_window.edit_action(name)
+        self.refresh()
+
+    def _dispatch_ui_action(self, callback: Callable[[], None]) -> Callable:
+        def _runner(icon, item):
+            threading.Thread(target=self._safe_ui_action, args=(callback,), daemon=True).start()
+
+        return _runner
+
+    def _safe_ui_action(self, callback: Callable[[], None]) -> None:
+        try:
+            callback()
+        except Exception as exc:  # pragma: no cover - surfaced via notification
+            self.notifier.error(str(exc))
 
     def _open_manager(self):
         root = tk.Tk()
