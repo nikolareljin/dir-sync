@@ -4,7 +4,8 @@ import copy
 import sys
 import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog, font as tkfont, scrolledtext, ttk
+from tkinter import filedialog, scrolledtext, ttk
+from tkinter import font as tkfont
 
 import psutil
 
