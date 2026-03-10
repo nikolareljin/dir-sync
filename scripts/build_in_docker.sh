@@ -13,6 +13,8 @@ PYTHON_IMAGE="${PYTHON_IMAGE:-python:3.11-slim}"
 PIP_CACHE_DIR="${PIP_CACHE_DIR:-$HOME/.cache/pip}"
 HOST_UID="${HOST_UID:-$(id -u)}"
 HOST_GID="${HOST_GID:-$(id -g)}"
+BUILD_VENV="${BUILD_VENV:-$PROJECT_ROOT/.venv}"
+BUILD_VENV_SYSTEM="${BUILD_VENV_SYSTEM:-$PROJECT_ROOT/.venv-build-system}"
 
 print_info "Building dir-sync inside Docker ($PYTHON_IMAGE)"
 check_docker || exit 1
@@ -26,6 +28,8 @@ docker run --rm -t \
   -e PIP_DISABLE_PIP_VERSION_CHECK=1 \
   -e HOST_UID="$HOST_UID" \
   -e HOST_GID="$HOST_GID" \
+  -e BUILD_VENV="$BUILD_VENV" \
+  -e BUILD_VENV_SYSTEM="$BUILD_VENV_SYSTEM" \
   "${DOCKER_VOLUMES[@]}" \
   "$PYTHON_IMAGE" /bin/bash - <<'EOF'
 set -euo pipefail
@@ -41,7 +45,7 @@ pip install pyinstaller >/dev/null
 scripts/build.sh
 
 if [[ -n "${HOST_UID:-}" && -n "${HOST_GID:-}" ]]; then
-  chown -R "$HOST_UID:$HOST_GID" dist .venv .pyinstaller-venv || true
+  chown -R "$HOST_UID:$HOST_GID" dist "$BUILD_VENV" "$BUILD_VENV_SYSTEM" || true
 fi
 EOF
 
