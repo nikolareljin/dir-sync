@@ -1,0 +1,24 @@
+name: Trivy Scan
+
+on:
+  pull_request:
+    branches: [main, master, "release/*"]
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
+jobs:
+  trivy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run trivy scan
+        uses: nikolareljin/ci-helpers/.github/actions/trivy-scan@production
+        with:
+          scan_path: "."
+          fail_on_findings: true
+          upload_sarif: false

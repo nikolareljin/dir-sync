@@ -1,6 +1,13 @@
 # Dir Sync
 
-Dir Sync is a cross-platform desktop companion that keeps directories mirrored through rsync-style actions. It lives in the system toolbar, lets you define reusable sync actions, watches for removable or network destinations, and surfaces notifications when jobs finish or devices appear.
+Dir Sync is a cross-platform desktop companion that keeps directories mirrored through rsync-style actions. It lives in the system tray, lets you define reusable sync actions, watches for removable or network destinations, and surfaces notifications when jobs finish or devices appear.
+
+Think of it as an automated backup / rsync of your important directories.
+
+Setting up directories: 
+
+<img width="1270" height="918" alt="image" src="https://github.com/user-attachments/assets/8e96f02b-0dfa-413a-bf86-a75020a7a59e" />
+
 
 ## Features
 
@@ -8,12 +15,35 @@ Dir Sync is a cross-platform desktop companion that keeps directories mirrored t
 - Configurable source/destination pairs supporting local paths, network drives, and USB devices.
 - Multiple sync strategies: full two-way reconciliation or one-way source-to-destination mirroring.
 - Automation modes: on app start, when the destination device appears, or on cron-style schedules.
+- Destination device matching by ID for removable media workflows (USB/HDD reconnect automation).
+- Source-change awareness in tray menu labels plus a one-click "Run all changed dirs" action.
 - Notification surface for completed jobs, errors, and newly detected drives.
 - YAML-based config import/export for sharing actions between machines.
 
 ## Getting Started
 
-See `docs/BUILD.md` for environment setup, dependency installation, and packaging guidance. Testing and verification steps are documented in `docs/TESTING.md`.
+### Environment Setup
+```bash
+python -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install --upgrade pip
+pip install -e .[dev]
+```
+
+### Run the App
+```bash
+python -m dirsync.app
+```
+The tray icon appears so you can configure sync pairs or trigger existing jobs.
+
+### Build a Standalone Binary
+Use the helper script (which installs PyInstaller if necessary) to mirror the packaging steps from `docs/BUILD.md`:
+```bash
+./scripts/build.sh
+```
+Artifacts are written to `dist/`.
+
+For additional background or optional packaging targets, see `docs/BUILD.md`. Testing guidance lives in `docs/TESTING.md`.
 
 ## License
 

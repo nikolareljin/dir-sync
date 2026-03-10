@@ -24,7 +24,12 @@ class Notifier:
     def send(self, title: str, message: str) -> None:
         self.logger.info("%s - %s", title, message)
         if notification:
-            notification.notify(title=title, message=message, app_name=self.app_name)
+            try:
+                notification.notify(title=title, message=message, app_name=self.app_name)
+            except NotImplementedError as exc:  # pragma: no cover - backend unavailable in CI
+                self.logger.warning("Notifications unavailable on this platform: %s", exc)
+            except Exception as exc:  # pragma: no cover - defensive logging
+                self.logger.warning("Failed to deliver notification: %s", exc)
 
     def success(self, message: str) -> None:
         self.send("Dir Sync", message)

@@ -11,5 +11,5 @@ dist/
 .DS_Store
 .idea/
 .vscode/
-
+.pyinstaller-venv/
 /ignore/

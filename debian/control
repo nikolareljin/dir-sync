@@ -1,0 +1,16 @@
+Source: dir-sync
+Section: utils
+Priority: optional
+Maintainer: Dir Sync Contributors <opensource@users.noreply.github.com>
+Build-Depends: debhelper-compat (= 13)|build-essential|python3|python3-pip|rsync
+Standards-Version: 4.6.2
+Homepage: https://github.com/nikolareljin/dir-sync
+Rules-Requires-Root: no
+
+Package: dir-sync
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, rsync
+
+
+Description: Cross-platform toolbar app for rsync-based directory synchronization.
+ Dir Sync runs in the system tray and executes one-way or two-way rsync workflows, including removable-drive automations.

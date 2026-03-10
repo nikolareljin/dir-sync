@@ -7,6 +7,11 @@ pytest --maxfail=1 --disable-warnings -q
 ruff check src tests
 ```
 
+Or run the tests in Docker without touching your host environment:
+```bash
+./scripts/test_in_docker.sh
+```
+
 ## End-to-End Smoke
 1. Start the app: `python -m dirsync.app`.
 2. Add a manual action via the toolbar and run it.

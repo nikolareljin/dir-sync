@@ -1,0 +1,25 @@
+name: Secrets Scan
+
+on:
+  pull_request:
+  push:
+    branches: ["**"]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Run gitleaks scan
+        uses: nikolareljin/ci-helpers/.github/actions/gitleaks-scan@production
+        with:
+          scan_path: "."
+          fail_on_findings: true
+          upload_artifact: true
