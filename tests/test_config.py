@@ -172,7 +172,11 @@ class TestConfigManager:
         manager.config.actions = []
         manager.ensure_default()
         assert len(manager.config.actions) == 1
-        assert manager.config.actions[0].name == "home-backup"
+        # Default action name might be "documents-backup" or "home-backup" depending on Documents folder existence
+        name = manager.config.actions[0].name
+        assert name in ("documents-backup", "home-backup")
+        # Both should use a directory under dir-sync-backups
+        assert "dir-sync-backups" in manager.config.actions[0].dst_path
 
     def test_ensure_default_noop_when_actions_exist(self, tmp_path):
         config_path = tmp_path / "config.yml"

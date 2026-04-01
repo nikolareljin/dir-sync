@@ -1,5 +1,9 @@
+import os
+import sys
 from pathlib import Path
 from typing import Tuple
+
+from croniter import croniter
 
 
 class PreflightValidator:
@@ -10,13 +14,13 @@ class PreflightValidator:
     - destination nested inside source (would cause recursion)
     - source nested inside destination (would cause unexpected deletes)
     - missing source path
-    - missing or unavailable sync backend
     - invalid cron expressions
     - destructive profile warnings
     """
 
     # Paths that are dangerous to use as destinations for automatic sync
     # Note: Excludes /home to avoid false positives for normal user destinations
+    # On Windows: C:\Windows, C:\Program Files, etc. are handled via Path.drive checks
     DANGEROUS_DESTINATIONS = (
         "/",
         "/etc",
@@ -30,16 +34,24 @@ class PreflightValidator:
         "/sys",
     )
 
+    # Windows dangerous paths
+    WINDOWS_DANGEROUS_DESTINATIONS = (
+        "C:\\Windows",
+        "C:\\Program Files",
+        "C:\\Program Files (x86)",
+        "C:\\ProgramData",
+        "C:\\Users\\Public",
+    )
+
     def __init__(self):
         self.errors = []
         self.warnings = []
 
-    def validate_action(self, action, action_name=None):
+    def validate_action(self, action):
         """Validate a single sync action.
         
         Args:
             action: SyncAction to validate
-            action_name: Optional name for error prefixing
             
         Returns:
             Tuple of (is_valid, errors, warnings)
@@ -104,12 +116,23 @@ class PreflightValidator:
             )
 
         # Check cron expression if scheduled
-        if action.action_type == "scheduled" and action.schedule:
-            if not self._is_valid_cron(action.schedule):
+        if action.action_type == "scheduled":
+            # If action_type is scheduled, schedule must be provided and valid
+            if not action.schedule or not str(action.schedule).strip():
                 self.errors.append(
-                    "Invalid cron expression: '{}'. "
-                    "Please use valid cron format (e.g., '0 2 * * *').".format(action.schedule)
+                    "Scheduled action requires a valid cron expression. "
+                    "Please provide a schedule (e.g., '0 2 * * *')."
                 )
+            else:
+                # Use croniter to validate cron expressions for compatibility with runtime scheduler
+                try:
+                    croniter(action.schedule)
+                except (KeyError, ValueError) as e:
+                    self.errors.append(
+                        "Invalid cron expression: '{}'. "
+                        "Croniter error: {}. "
+                        "Please use valid cron format (e.g., '0 2 * * *').".format(action.schedule, e)
+                    )
 
         # Check method-specific requirements
         if action.method == "two_way":
@@ -137,87 +160,27 @@ class PreflightValidator:
             return False
 
     def _is_dangerous_destination(self, path):
-        """Check if path is a dangerous system location."""
-        path_str = str(path)
-        return path_str in self.DANGEROUS_DESTINATIONS or any(
-            path_str.startswith(dangerous + "/") for dangerous in self.DANGEROUS_DESTINATIONS
-        )
-
-    def _is_valid_cron(self, expression):
-        """Validate cron expression format.
+        """Check if path is a dangerous system location.
         
-        Supports standard 5-field cron: minute hour day month weekday
-        Also supports special strings: @yearly, @monthly, @weekly, @daily, @hourly, @reboot
-        
-        Note: Day of week accepts both 0 and 7 for Sunday (croniter compatibility).
+        Handles both Unix-style paths and Windows paths.
         """
-        special_expressions = ("@yearly", "@monthly", "@weekly", "@daily", "@hourly", "@reboot")
-        if expression.lower() in special_expressions:
+        path_str = str(path)
+        
+        # Check Unix-style dangerous destinations
+        if path_str in self.DANGEROUS_DESTINATIONS or any(
+            path_str.startswith(dangerous + "/") for dangerous in self.DANGEROUS_DESTINATIONS
+        ):
             return True
-
-        parts = expression.split()
-        if len(parts) != 5:
-            return False
-
-        # Validate each field with basic ranges
-        # Note: day of week allows 0-7 (both 0 and 7 represent Sunday for croniter compatibility)
-        ranges = [
-            (0, 59),   # minute
-            (0, 23),   # hour
-            (1, 31),   # day of month
-            (1, 12),   # month
-            (0, 7),    # day of week (0 and 7 are both Sunday)
-        ]
-
-        for part, (min_val, max_val) in zip(parts, ranges):
-            if not self._is_valid_cron_field(part, min_val, max_val):
-                return False
-
-        return True
-
-    def _is_valid_cron_field(self, field, min_val, max_val):
-        """Validate a single cron field."""
-        # Handle wildcard
-        if field == "*":
-            return True
-
-        # Handle step values (e.g., */5, 1-10/2)
-        if "/" in field:
-            parts = field.split("/")
-            if len(parts) != 2:
-                return False
-            base, step = parts
-            if not step.isdigit() or int(step) <= 0:
-                return False
-            if base == "*":
-                return True
-            field = base  # Validate the base part
-
-        # Handle ranges (e.g., 1-5)
-        if "-" in field:
-            range_parts = field.split("-")
-            if len(range_parts) != 2:
-                return False
-            for part in range_parts:
-                if not part.isdigit():
-                    return False
-                val = int(part)
-                if val < min_val or val > max_val:
-                    return False
-            return True
-
-        # Handle comma-separated lists (e.g., 1,3,5)
-        if "," in field:
-            for part in field.split(","):
-                if not self._is_valid_cron_field(part, min_val, max_val):
-                    return False
-            return True
-
-        # Single value
-        if not field.isdigit():
-            return False
-        val = int(field)
-        return min_val <= val <= max_val
+        
+        # Check Windows-style dangerous destinations
+        if sys.platform.startswith("win"):
+            path_upper = path_str.upper()
+            for dangerous in self.WINDOWS_DANGEROUS_DESTINATIONS:
+                dangerous_upper = dangerous.upper()
+                if path_upper == dangerous_upper or path_upper.startswith(dangerous_upper + "\\"):
+                    return True
+        
+        return False
 
     def _looks_like_destructive_sync(self, action):
         """Check if sync configuration looks potentially destructive."""
