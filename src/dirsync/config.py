@@ -142,17 +142,32 @@ class ConfigManager:
         return target
 
     def import_file(self, source: Path, validate: bool = True) -> SyncConfig:
-        """Import configuration from a file with optional validation."""
+        """Import configuration from a file with optional validation.
+        
+        Note: Validates imported config BEFORE mutating manager state to prevent
+        partial state corruption on validation failure.
+        """
         with source.open("r", encoding="utf-8") as handle:
             payload = yaml.safe_load(handle)
         actions = [SyncAction(**item).normalize() for item in payload.get("actions", [])]
-        self.config = SyncConfig(sync_tool=payload.get("sync_tool", "rsync"), actions=actions)
+        
+        # Create temporary config for validation (don't mutate self.config yet)
+        temp_config = SyncConfig(sync_tool=payload.get("sync_tool", "rsync"), actions=actions)
+        
         if validate and not self.skip_validation:
-            is_valid, errors, warnings = self.validate()
+            # Validate the temp config before assigning
+            validator = ConfigValidator()
+            is_valid, errors, warnings = validator.validate_config(temp_config.actions)
             if not is_valid:
                 raise ValueError(
                     "Configuration validation failed:\n" + "\n".join("  - {}".format(e) for e in errors)
                 )
+            # Log warnings but don't block import
+            for warning in warnings:
+                logging.warning("Config warning: %s", warning)
+        
+        # Only mutate state after validation passes
+        self.config = temp_config
         self.save(validate=False)  # Already validated
         return self.config
 

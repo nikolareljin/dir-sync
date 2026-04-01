@@ -1,6 +1,5 @@
-import re
 from pathlib import Path
-from typing import List, Tuple
+from typing import Tuple
 
 
 class PreflightValidator:
@@ -17,9 +16,9 @@ class PreflightValidator:
     """
 
     # Paths that are dangerous to use as destinations for automatic sync
+    # Note: Excludes /home to avoid false positives for normal user destinations
     DANGEROUS_DESTINATIONS = (
         "/",
-        "/home",
         "/etc",
         "/usr",
         "/var",
@@ -35,14 +34,31 @@ class PreflightValidator:
         self.errors = []
         self.warnings = []
 
-    def validate_action(self, action):
+    def validate_action(self, action, action_name=None):
         """Validate a single sync action.
         
+        Args:
+            action: SyncAction to validate
+            action_name: Optional name for error prefixing
+            
         Returns:
             Tuple of (is_valid, errors, warnings)
         """
         self.errors = []
         self.warnings = []
+
+        # Check for missing/empty source FIRST (before path resolution)
+        if not action.src_path or not str(action.src_path).strip():
+            self.errors.append("Source path is missing or empty")
+
+        # Check for missing/empty destination FIRST (before path resolution)
+        if not action.dst_path or not str(action.dst_path).strip():
+            self.errors.append("Destination path is missing or empty")
+
+        # If we have empty paths, return early to avoid misleading errors
+        if not action.src_path or not str(action.src_path).strip() or \
+           not action.dst_path or not str(action.dst_path).strip():
+            return False, self.errors, self.warnings
 
         # Normalize paths for comparison
         try:
@@ -52,13 +68,12 @@ class PreflightValidator:
             self.errors.append("Cannot resolve paths: {}".format(e))
             return False, self.errors, self.warnings
 
-        # Check for missing source
-        if not action.src_path or not action.src_path.strip():
-            self.errors.append("Source path is missing or empty")
-
-        # Check for missing destination
-        if not action.dst_path or not action.dst_path.strip():
-            self.errors.append("Destination path is missing or empty")
+        # Check source path exists (destination can be created by executor)
+        if not src_expanded.exists():
+            self.errors.append(
+                "Source path does not exist: '{}'. "
+                "Please ensure the source directory exists before creating a sync action.".format(src_expanded)
+            )
 
         # Check source equals destination
         if src_expanded == dst_expanded:
@@ -133,6 +148,8 @@ class PreflightValidator:
         
         Supports standard 5-field cron: minute hour day month weekday
         Also supports special strings: @yearly, @monthly, @weekly, @daily, @hourly, @reboot
+        
+        Note: Day of week accepts both 0 and 7 for Sunday (croniter compatibility).
         """
         special_expressions = ("@yearly", "@monthly", "@weekly", "@daily", "@hourly", "@reboot")
         if expression.lower() in special_expressions:
@@ -143,12 +160,13 @@ class PreflightValidator:
             return False
 
         # Validate each field with basic ranges
+        # Note: day of week allows 0-7 (both 0 and 7 represent Sunday for croniter compatibility)
         ranges = [
             (0, 59),   # minute
             (0, 23),   # hour
             (1, 31),   # day of month
             (1, 12),   # month
-            (0, 6),    # day of week
+            (0, 7),    # day of week (0 and 7 are both Sunday)
         ]
 
         for part, (min_val, max_val) in zip(parts, ranges):
@@ -233,9 +251,12 @@ class ConfigValidator:
 
             # Validate individual action
             validator = PreflightValidator()
-            is_valid, errors, warnings = validator.validate_action(action)
-            self.errors.extend(errors)
-            self.warnings.extend(warnings)
+            is_valid, errors, warnings = validator.validate_action(action, action_name=action.name)
+            # Prefix errors and warnings with action name for clarity
+            for err in errors:
+                self.errors.append("Action '{}': {}".format(action.name, err))
+            for warn in warnings:
+                self.warnings.append("Action '{}': {}".format(action.name, warn))
 
         is_valid = len(self.errors) == 0
         return is_valid, self.errors, self.warnings
