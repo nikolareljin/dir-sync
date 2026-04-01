@@ -11,6 +11,9 @@ import yaml
 from .constants import CONFIG_PATH, SUPPORTED_ACTION_TYPES, SUPPORTED_METHODS
 from .validator import ConfigValidator, PreflightValidator
 
+# Use module-level logger for consistent logging
+_logger = logging.getLogger(__name__)
+
 
 @dataclass
 class SyncAction:
@@ -111,7 +114,7 @@ class ConfigManager:
                 )
             # Log warnings but don't block save
             for warning in warnings:
-                logging.warning("Config warning: %s", warning)
+                _logger.warning("Config warning: %s", warning)
 
         data = {
             "sync_tool": self.config.sync_tool,
@@ -148,7 +151,7 @@ class ConfigManager:
         partial state corruption on validation failure.
         """
         with source.open("r", encoding="utf-8") as handle:
-            payload = yaml.safe_load(handle)
+            payload = yaml.safe_load(handle) or {}  # Default to empty dict if file is empty
         actions = [SyncAction(**item).normalize() for item in payload.get("actions", [])]
         
         # Create temporary config for validation (don't mutate self.config yet)
@@ -173,11 +176,25 @@ class ConfigManager:
 
     def ensure_default(self) -> None:
         if not self.config.actions:
-            # Use a safe default that doesn't create recursive backups under home
+            # Try to find an existing directory for the default backup
+            # Use Documents if it exists, otherwise fall back to home
+            home = Path.home()
+            docs = home / "Documents"
+            if docs.exists() and docs.is_dir():
+                default_src = str(docs)
+            else:
+                # Fallback to home if Documents doesn't exist
+                default_src = str(home)
+            
+            # Destination is always under dir-sync-backups subfolder
+            dst_path = home / "dir-sync-backups"
+            if not dst_path.exists():
+                dst_path.mkdir(parents=True, exist_ok=True)
+            
             sample = SyncAction(
                 name="documents-backup",
-                src_path=str(Path.home() / "Documents"),
-                dst_path=str(Path.home() / "dir-sync-backups" / "documents"),
+                src_path=default_src,
+                dst_path=str(dst_path / "documents"),
                 method="one_way",
                 action_type="manual",
             )

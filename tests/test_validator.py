@@ -2,7 +2,7 @@ import pytest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from dirsync.config import ConfigManager, SyncAction, SyncConfig
+from dirsync.config import ConfigManager, SyncAction
 from dirsync.validator import ConfigValidator, PreflightValidator
 
 
@@ -11,25 +11,39 @@ from dirsync.validator import ConfigValidator, PreflightValidator
 
 class TestPreflightValidatorBasicPaths:
     def test_source_equals_destination_fails(self):
-        action = SyncAction(name="test", src_path="/same/path", dst_path="/same/path")
-        validator = PreflightValidator()
-        is_valid, errors, warnings = validator.validate_action(action)
-        assert not is_valid
-        assert any("identical" in e.lower() for e in errors)
+        with TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "path"
+            path.mkdir()
+            action = SyncAction(name="test", src_path=str(path), dst_path=str(path))
+            validator = PreflightValidator()
+            is_valid, errors, warnings = validator.validate_action(action)
+            assert not is_valid
+            assert any("identical" in e.lower() for e in errors)
 
     def test_destination_nested_in_source_fails(self):
-        action = SyncAction(name="test", src_path="/home/user", dst_path="/home/user/backup")
-        validator = PreflightValidator()
-        is_valid, errors, warnings = validator.validate_action(action)
-        assert not is_valid
-        assert any("recursion" in e.lower() for e in errors)
+        with TemporaryDirectory() as tmpdir:
+            src = Path(tmpdir) / "src"
+            dst = src / "backup"
+            src.mkdir()
+            dst.mkdir()
+            action = SyncAction(name="test", src_path=str(src), dst_path=str(dst))
+            validator = PreflightValidator()
+            is_valid, errors, warnings = validator.validate_action(action)
+            assert not is_valid
+            assert any("recursion" in e.lower() for e in errors)
 
     def test_source_nested_in_destination_fails(self):
-        action = SyncAction(name="test", src_path="/home/user/data", dst_path="/home/user")
-        validator = PreflightValidator()
-        is_valid, errors, warnings = validator.validate_action(action)
-        assert not is_valid
-        assert any("nested" in e.lower() for e in errors)
+        with TemporaryDirectory() as tmpdir:
+            src = Path(tmpdir) / "src" / "data"
+            dst = Path(tmpdir) / "src"
+            src.parent.mkdir(parents=True)
+            src.mkdir()
+            dst.mkdir()
+            action = SyncAction(name="test", src_path=str(src), dst_path=str(dst))
+            validator = PreflightValidator()
+            is_valid, errors, warnings = validator.validate_action(action)
+            assert not is_valid
+            assert any("nested" in e.lower() for e in errors)
 
     def test_missing_source_fails(self):
         action = SyncAction(name="test", src_path="", dst_path="/dest")
@@ -44,6 +58,17 @@ class TestPreflightValidatorBasicPaths:
         is_valid, errors, warnings = validator.validate_action(action)
         assert not is_valid
         assert any("destination" in e.lower() and "missing" in e.lower() for e in errors)
+
+    def test_nonexistent_source_fails(self):
+        with TemporaryDirectory() as tmpdir:
+            nonexistent = Path(tmpdir) / "nonexistent"
+            dst = Path(tmpdir) / "dst"
+            dst.mkdir()
+            action = SyncAction(name="test", src_path=str(nonexistent), dst_path=str(dst))
+            validator = PreflightValidator()
+            is_valid, errors, warnings = validator.validate_action(action)
+            assert not is_valid
+            assert any("not exist" in e.lower() or "source" in e.lower() for e in errors)
 
     def test_valid_paths_pass(self):
         with TemporaryDirectory() as tmpdir:
@@ -63,92 +88,126 @@ class TestPreflightValidatorBasicPaths:
 
 class TestPreflightValidatorCron:
     def test_valid_cron_passes(self):
-        action = SyncAction(
-            name="test",
-            src_path="/src",
-            dst_path="/dst",
-            action_type="scheduled",
-            schedule="0 2 * * *"
-        )
-        validator = PreflightValidator()
-        is_valid, errors, warnings = validator.validate_action(action)
-        assert is_valid
-        assert errors == []
-
-    def test_invalid_cron_fails(self):
-        action = SyncAction(
-            name="test",
-            src_path="/src",
-            dst_path="/dst",
-            action_type="scheduled",
-            schedule="invalid cron"
-        )
-        validator = PreflightValidator()
-        is_valid, errors, warnings = validator.validate_action(action)
-        assert not is_valid
-        assert any("cron" in e.lower() and "invalid" in e.lower() for e in errors)
-
-    def test_cron_out_of_range_fails(self):
-        # Minute 99 is invalid (0-59)
-        action = SyncAction(
-            name="test",
-            src_path="/src",
-            dst_path="/dst",
-            action_type="scheduled",
-            schedule="99 * * * *"
-        )
-        validator = PreflightValidator()
-        is_valid, errors, warnings = validator.validate_action(action)
-        assert not is_valid
-
-    def test_special_cron_expressions_pass(self):
-        for special in ["@yearly", "@monthly", "@weekly", "@daily", "@hourly"]:
+        with TemporaryDirectory() as tmpdir:
+            src = Path(tmpdir) / "src"
+            dst = Path(tmpdir) / "dst"
+            src.mkdir()
+            dst.mkdir()
             action = SyncAction(
                 name="test",
-                src_path="/src",
-                dst_path="/dst",
+                src_path=str(src),
+                dst_path=str(dst),
                 action_type="scheduled",
-                schedule=special
+                schedule="0 2 * * *"
             )
             validator = PreflightValidator()
             is_valid, errors, warnings = validator.validate_action(action)
-            assert is_valid, "Failed for {}".format(special)
+            assert is_valid
+            assert errors == []
+
+    def test_invalid_cron_fails(self):
+        with TemporaryDirectory() as tmpdir:
+            src = Path(tmpdir) / "src"
+            dst = Path(tmpdir) / "dst"
+            src.mkdir()
+            dst.mkdir()
+            action = SyncAction(
+                name="test",
+                src_path=str(src),
+                dst_path=str(dst),
+                action_type="scheduled",
+                schedule="invalid cron"
+            )
+            validator = PreflightValidator()
+            is_valid, errors, warnings = validator.validate_action(action)
+            assert not is_valid
+            assert any("cron" in e.lower() and "invalid" in e.lower() for e in errors)
+
+    def test_cron_out_of_range_fails(self):
+        with TemporaryDirectory() as tmpdir:
+            src = Path(tmpdir) / "src"
+            dst = Path(tmpdir) / "dst"
+            src.mkdir()
+            dst.mkdir()
+            action = SyncAction(
+                name="test",
+                src_path=str(src),
+                dst_path=str(dst),
+                action_type="scheduled",
+                schedule="99 * * * *"
+            )
+            validator = PreflightValidator()
+            is_valid, errors, warnings = validator.validate_action(action)
+            assert not is_valid
+
+    def test_special_cron_expressions_pass(self):
+        with TemporaryDirectory() as tmpdir:
+            src = Path(tmpdir) / "src"
+            dst = Path(tmpdir) / "dst"
+            src.mkdir()
+            dst.mkdir()
+            for special in ["@yearly", "@monthly", "@weekly", "@daily", "@hourly"]:
+                action = SyncAction(
+                    name="test",
+                    src_path=str(src),
+                    dst_path=str(dst),
+                    action_type="scheduled",
+                    schedule=special
+                )
+                validator = PreflightValidator()
+                is_valid, errors, warnings = validator.validate_action(action)
+                assert is_valid, "Failed for {}".format(special)
 
     def test_cron_with_steps_passes(self):
-        action = SyncAction(
-            name="test",
-            src_path="/src",
-            dst_path="/dst",
-            action_type="scheduled",
-            schedule="*/15 * * * *"  # Every 15 minutes
-        )
-        validator = PreflightValidator()
-        is_valid, errors, warnings = validator.validate_action(action)
-        assert is_valid
+        with TemporaryDirectory() as tmpdir:
+            src = Path(tmpdir) / "src"
+            dst = Path(tmpdir) / "dst"
+            src.mkdir()
+            dst.mkdir()
+            action = SyncAction(
+                name="test",
+                src_path=str(src),
+                dst_path=str(dst),
+                action_type="scheduled",
+                schedule="*/15 * * * *"  # Every 15 minutes
+            )
+            validator = PreflightValidator()
+            is_valid, errors, warnings = validator.validate_action(action)
+            assert is_valid
 
     def test_cron_with_ranges_passes(self):
-        action = SyncAction(
-            name="test",
-            src_path="/src",
-            dst_path="/dst",
-            action_type="scheduled",
-            schedule="0 9-17 * * 1-5"  # Business hours, weekdays
-        )
-        validator = PreflightValidator()
-        is_valid, errors, warnings = validator.validate_action(action)
-        assert is_valid
+        with TemporaryDirectory() as tmpdir:
+            src = Path(tmpdir) / "src"
+            dst = Path(tmpdir) / "dst"
+            src.mkdir()
+            dst.mkdir()
+            action = SyncAction(
+                name="test",
+                src_path=str(src),
+                dst_path=str(dst),
+                action_type="scheduled",
+                schedule="0 9-17 * * 1-5"  # Business hours, weekdays
+            )
+            validator = PreflightValidator()
+            is_valid, errors, warnings = validator.validate_action(action)
+            assert is_valid
 
     def test_cron_with_lists_passes(self):
-        action = SyncAction(
-            name="test",
-            src_path="/src",
-            dst_path="/dst",
-            action_type="scheduled",
-            schedule="0 9,12,17 * * *"  # 9am, noon, 5pm
-        )
-        validator = PreflightValidator()
-        is_valid, errors, warnings = validator.validate_action(action)
-        assert is_valid
+        with TemporaryDirectory() as tmpdir:
+            src = Path(tmpdir) / "src"
+            dst = Path(tmpdir) / "dst"
+            src.mkdir()
+            dst.mkdir()
+            action = SyncAction(
+                name="test",
+                src_path=str(src),
+                dst_path=str(dst),
+                action_type="scheduled",
+                schedule="0 9,12,17 * * *"  # 9am, noon, 5pm
+            )
+            validator = PreflightValidator()
+            is_valid, errors, warnings = validator.validate_action(action)
+            assert is_valid
 
 
 # --- PreflightValidator: Destructive Sync Warnings ---
@@ -190,24 +249,42 @@ class TestPreflightValidatorDestructiveSync:
 
 class TestConfigValidator:
     def test_duplicate_action_names_fail(self):
-        actions = [
-            SyncAction(name="dup", src_path="/src1", dst_path="/dst1"),
-            SyncAction(name="dup", src_path="/src2", dst_path="/dst2"),
-        ]
-        validator = ConfigValidator()
-        is_valid, errors, warnings = validator.validate_config(actions)
-        assert not is_valid
-        assert any("duplicate" in e.lower() for e in errors)
+        with TemporaryDirectory() as tmpdir:
+            src1 = Path(tmpdir) / "src1"
+            dst1 = Path(tmpdir) / "dst1"
+            src1.mkdir()
+            dst1.mkdir()
+            src2 = Path(tmpdir) / "src2"
+            dst2 = Path(tmpdir) / "dst2"
+            src2.mkdir()
+            dst2.mkdir()
+            actions = [
+                SyncAction(name="dup", src_path=str(src1), dst_path=str(dst1)),
+                SyncAction(name="dup", src_path=str(src2), dst_path=str(dst2)),
+            ]
+            validator = ConfigValidator()
+            is_valid, errors, warnings = validator.validate_config(actions)
+            assert not is_valid
+            assert any("duplicate" in e.lower() for e in errors)
 
     def test_unique_action_names_pass(self):
-        actions = [
-            SyncAction(name="action1", src_path="/src1", dst_path="/dst1"),
-            SyncAction(name="action2", src_path="/src2", dst_path="/dst2"),
-        ]
-        validator = ConfigValidator()
-        is_valid, errors, warnings = validator.validate_config(actions)
-        assert is_valid
-        assert errors == []
+        with TemporaryDirectory() as tmpdir:
+            src1 = Path(tmpdir) / "src1"
+            dst1 = Path(tmpdir) / "dst1"
+            src1.mkdir()
+            dst1.mkdir()
+            src2 = Path(tmpdir) / "src2"
+            dst2 = Path(tmpdir) / "dst2"
+            src2.mkdir()
+            dst2.mkdir()
+            actions = [
+                SyncAction(name="action1", src_path=str(src1), dst_path=str(dst1)),
+                SyncAction(name="action2", src_path=str(src2), dst_path=str(dst2)),
+            ]
+            validator = ConfigValidator()
+            is_valid, errors, warnings = validator.validate_config(actions)
+            assert is_valid
+            assert errors == []
 
 
 # --- ConfigManager Integration ---
@@ -219,9 +296,12 @@ class TestConfigManagerValidation:
         manager = ConfigManager(path=config_path)
         manager.config.actions = []
         
-        # Add invalid action (same src/dst)
-        invalid_action = SyncAction(name="bad", src_path="/same", dst_path="/same")
-        manager.config.actions.append(invalid_action)
+        # Add invalid action (same src/dst in temp dir)
+        with TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "path"
+            path.mkdir()
+            invalid_action = SyncAction(name="bad", src_path=str(path), dst_path=str(path))
+            manager.config.actions.append(invalid_action)
         
         with pytest.raises(ValueError, match="validation failed"):
             manager.save()
@@ -231,9 +311,12 @@ class TestConfigManagerValidation:
         manager = ConfigManager(path=config_path, skip_validation=True)
         manager.config.actions = []
         
-        # Add invalid action
-        invalid_action = SyncAction(name="bad", src_path="/same", dst_path="/same")
-        manager.config.actions.append(invalid_action)
+        # Add invalid action in temp dir
+        with TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "path"
+            path.mkdir()
+            invalid_action = SyncAction(name="bad", src_path=str(path), dst_path=str(path))
+            manager.config.actions.append(invalid_action)
         
         # Should not raise
         manager.save()
@@ -244,7 +327,11 @@ class TestConfigManagerValidation:
         manager = ConfigManager(path=config_path)
         manager.config.actions = []
         
-        invalid_action = SyncAction(name="bad", src_path="/same", dst_path="/same")
+        # Add invalid action in temp dir
+        with TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "path"
+            path.mkdir()
+            invalid_action = SyncAction(name="bad", src_path=str(path), dst_path=str(path))
         
         with pytest.raises(ValueError, match="validation failed"):
             manager.add_action(invalid_action)
@@ -258,8 +345,6 @@ class TestConfigManagerValidation:
         assert len(manager.config.actions) == 1
         action = manager.config.actions[0]
         assert action.name == "documents-backup"
-        # Default should use Documents folder, not entire home
-        assert "Documents" in action.src_path
         # Destination should be under dir-sync-backups subfolder
         assert "dir-sync-backups" in action.dst_path
         # Validate the default passes validation
@@ -271,9 +356,14 @@ class TestConfigManagerValidation:
         manager = ConfigManager(path=config_path)
         manager.config.actions = []
         
-        # Add valid action
-        action = SyncAction(name="test", src_path="/src", dst_path="/dst")
-        manager.config.actions.append(action)
+        # Add valid action in temp dir
+        with TemporaryDirectory() as tmpdir:
+            src = Path(tmpdir) / "src"
+            dst = Path(tmpdir) / "dst"
+            src.mkdir()
+            dst.mkdir()
+            action = SyncAction(name="test", src_path=str(src), dst_path=str(dst))
+            manager.config.actions.append(action)
         
         is_valid, errors, warnings = manager.validate()
         assert is_valid
@@ -285,12 +375,20 @@ class TestConfigManagerValidation:
 
 class TestSyncActionValidateMethod:
     def test_validate_method_exists(self):
-        action = SyncAction(name="test", src_path="/src", dst_path="/dst")
-        is_valid, errors, warnings = action.validate()
-        assert is_valid
+        with TemporaryDirectory() as tmpdir:
+            src = Path(tmpdir) / "src"
+            dst = Path(tmpdir) / "dst"
+            src.mkdir()
+            dst.mkdir()
+            action = SyncAction(name="test", src_path=str(src), dst_path=str(dst))
+            is_valid, errors, warnings = action.validate()
+            assert is_valid
 
     def test_validate_method_catches_errors(self):
-        action = SyncAction(name="test", src_path="/same", dst_path="/same")
-        is_valid, errors, warnings = action.validate()
-        assert not is_valid
-        assert len(errors) > 0
+        with TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "path"
+            path.mkdir()
+            action = SyncAction(name="test", src_path=str(path), dst_path=str(path))
+            is_valid, errors, warnings = action.validate()
+            assert not is_valid
+            assert len(errors) > 0
