@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import yaml
 
 from .constants import CONFIG_PATH, SUPPORTED_ACTION_TYPES, SUPPORTED_METHODS
+from .validator import ConfigValidator, PreflightValidator
 
 
 @dataclass
@@ -37,6 +39,15 @@ class SyncAction:
         self.includes = [p.strip() for p in self.includes if p.strip()]
         self.excludes = [p.strip() for p in self.excludes if p.strip()]
         return self
+
+    def validate(self) -> Tuple[bool, List[str], List[str]]:
+        """Validate this action using preflight validation.
+        
+        Returns:
+            Tuple of (is_valid, errors, warnings)
+        """
+        validator = PreflightValidator()
+        return validator.validate_action(self)
 
 
 @dataclass
@@ -68,10 +79,11 @@ class SyncConfig:
 
 
 class ConfigManager:
-    def __init__(self, path: Path = CONFIG_PATH):
+    def __init__(self, path: Path = CONFIG_PATH, skip_validation: bool = False):
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.config = SyncConfig()
+        self.skip_validation = skip_validation
         if self.path.exists():
             self.load()
         else:
@@ -84,7 +96,23 @@ class ConfigManager:
         self.config = SyncConfig(sync_tool=raw.get("sync_tool", "rsync"), actions=actions)
         return self.config
 
-    def save(self) -> None:
+    def save(self, validate: bool = True) -> None:
+        """Save configuration with optional validation.
+        
+        Args:
+            validate: If True, run preflight validation before saving.
+                     Raises ValueError if validation fails.
+        """
+        if validate and not self.skip_validation:
+            is_valid, errors, warnings = self.validate()
+            if not is_valid:
+                raise ValueError(
+                    "Configuration validation failed:\n" + "\n".join("  - {}".format(e) for e in errors)
+                )
+            # Log warnings but don't block save
+            for warning in warnings:
+                logging.warning("Config warning: %s", warning)
+
         data = {
             "sync_tool": self.config.sync_tool,
             "actions": [asdict(a) for a in self.config.actions],
@@ -92,7 +120,15 @@ class ConfigManager:
         with self.path.open("w", encoding="utf-8") as handle:
             yaml.safe_dump(data, handle, sort_keys=False)
 
-    def export(self, target: Path) -> Path:
+    def export(self, target: Path, validate: bool = True) -> Path:
+        """Export configuration to a file with optional validation."""
+        if validate and not self.skip_validation:
+            is_valid, errors, warnings = self.validate()
+            if not is_valid:
+                raise ValueError(
+                    "Configuration validation failed:\n" + "\n".join("  - {}".format(e) for e in errors)
+                )
+
         target.parent.mkdir(parents=True, exist_ok=True)
         with target.open("w", encoding="utf-8") as handle:
             yaml.safe_dump(
@@ -105,25 +141,64 @@ class ConfigManager:
             )
         return target
 
-    def import_file(self, source: Path) -> SyncConfig:
+    def import_file(self, source: Path, validate: bool = True) -> SyncConfig:
+        """Import configuration from a file with optional validation."""
         with source.open("r", encoding="utf-8") as handle:
             payload = yaml.safe_load(handle)
         actions = [SyncAction(**item).normalize() for item in payload.get("actions", [])]
         self.config = SyncConfig(sync_tool=payload.get("sync_tool", "rsync"), actions=actions)
-        self.save()
+        if validate and not self.skip_validation:
+            is_valid, errors, warnings = self.validate()
+            if not is_valid:
+                raise ValueError(
+                    "Configuration validation failed:\n" + "\n".join("  - {}".format(e) for e in errors)
+                )
+        self.save(validate=False)  # Already validated
         return self.config
 
     def ensure_default(self) -> None:
         if not self.config.actions:
+            # Use a safe default that doesn't create recursive backups under home
             sample = SyncAction(
-                name="home-backup",
-                src_path=str(Path.home()),
-                dst_path=str(Path.home() / "dir-sync-backups"),
+                name="documents-backup",
+                src_path=str(Path.home() / "Documents"),
+                dst_path=str(Path.home() / "dir-sync-backups" / "documents"),
                 method="one_way",
                 action_type="manual",
             )
             self.config.actions.append(sample)
             self.save()
+
+    def validate(self) -> Tuple[bool, List[str], List[str]]:
+        """Validate entire configuration using preflight validation.
+        
+        Returns:
+            Tuple of (is_valid, errors, warnings)
+        """
+        validator = ConfigValidator()
+        return validator.validate_config(self.config.actions)
+
+    def add_action(self, action: SyncAction, validate: bool = True) -> None:
+        """Add an action with optional validation."""
+        if validate and not self.skip_validation:
+            is_valid, errors, warnings = action.validate()
+            if not is_valid:
+                raise ValueError(
+                    "Action validation failed:\n" + "\n".join("  - {}".format(e) for e in errors)
+                )
+        self.config.add_action(action)
+        self.save(validate=validate)
+
+    def update_action(self, action: SyncAction, validate: bool = True) -> None:
+        """Update an action with optional validation."""
+        if validate and not self.skip_validation:
+            is_valid, errors, warnings = action.validate()
+            if not is_valid:
+                raise ValueError(
+                    "Action validation failed:\n" + "\n".join("  - {}".format(e) for e in errors)
+                )
+        self.config.update_action(action)
+        self.save(validate=validate)
 
 
 __all__ = [
