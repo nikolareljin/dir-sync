@@ -38,7 +38,6 @@ class TestPreflightValidatorBasicPaths:
             dst = Path(tmpdir) / "src"
             src.parent.mkdir(parents=True)
             src.mkdir()
-            dst.mkdir()
             action = SyncAction(name="test", src_path=str(src), dst_path=str(dst))
             validator = PreflightValidator()
             is_valid, errors, warnings = validator.validate_action(action)
@@ -215,33 +214,42 @@ class TestPreflightValidatorCron:
 
 class TestPreflightValidatorDestructiveSync:
     def test_one_way_no_filters_warns(self):
-        action = SyncAction(
-            name="test",
-            src_path="/src",
-            dst_path="/dst",
-            method="one_way",
-            includes=[],
-            excludes=[]
-        )
-        validator = PreflightValidator()
-        is_valid, errors, warnings = validator.validate_action(action)
-        assert is_valid  # Still valid
-        assert any("destructive" in w.lower() or "overwrite" in w.lower() for w in warnings)
+        with TemporaryDirectory() as tmpdir:
+            src = Path(tmpdir) / "src"
+            dst = Path(tmpdir) / "dst"
+            src.mkdir()
+            dst.mkdir()
+            action = SyncAction(
+                name="test",
+                src_path=str(src),
+                dst_path=str(dst),
+                method="one_way",
+                includes=[],
+                excludes=[],
+            )
+            validator = PreflightValidator()
+            is_valid, errors, warnings = validator.validate_action(action)
+            assert is_valid
+            assert any("destructive" in w.lower() or "overwrite" in w.lower() for w in warnings)
 
     def test_one_way_with_filters_no_warning(self):
-        action = SyncAction(
-            name="test",
-            src_path="/src",
-            dst_path="/dst",
-            method="one_way",
-            includes=["*.txt"],
-            excludes=[]
-        )
-        validator = PreflightValidator()
-        is_valid, errors, warnings = validator.validate_action(action)
-        assert is_valid
-        # Should not have destructive warning when filters are present
-        assert not any("destructive" in w.lower() or "overwrite" in w.lower() for w in warnings)
+        with TemporaryDirectory() as tmpdir:
+            src = Path(tmpdir) / "src"
+            dst = Path(tmpdir) / "dst"
+            src.mkdir()
+            dst.mkdir()
+            action = SyncAction(
+                name="test",
+                src_path=str(src),
+                dst_path=str(dst),
+                method="one_way",
+                includes=["*.txt"],
+                excludes=[],
+            )
+            validator = PreflightValidator()
+            is_valid, errors, warnings = validator.validate_action(action)
+            assert is_valid
+            assert not any("destructive" in w.lower() or "overwrite" in w.lower() for w in warnings)
 
 
 # --- ConfigValidator: Cross-Action Validation ---
@@ -336,18 +344,23 @@ class TestConfigManagerValidation:
         with pytest.raises(ValueError, match="validation failed"):
             manager.add_action(invalid_action)
 
-    def test_ensure_default_creates_safe_config(self, tmp_path):
+    def test_ensure_default_creates_safe_config(self, tmp_path, monkeypatch):
         config_path = tmp_path / "config.yml"
+        fake_home = tmp_path / "home"
+        fake_home.mkdir()
+        docs_path = fake_home / "Documents"
+        import dirsync.config as config_module
+
+        monkeypatch.setattr(config_module.Path, "home", lambda: fake_home)
         manager = ConfigManager(path=config_path)
         manager.config.actions = []
         manager.ensure_default()
-        
+
         assert len(manager.config.actions) == 1
         action = manager.config.actions[0]
         assert action.name == "documents-backup"
-        # Destination should be under dir-sync-backups subfolder
         assert "dir-sync-backups" in action.dst_path
-        # Validate the default passes validation
+        assert action.src_path == str(docs_path)
         is_valid, errors, warnings = action.validate()
         assert is_valid, "Default action failed validation: {}".format(errors)
 
@@ -355,8 +368,7 @@ class TestConfigManagerValidation:
         config_path = tmp_path / "config.yml"
         manager = ConfigManager(path=config_path)
         manager.config.actions = []
-        
-        # Add valid action in temp dir
+
         with TemporaryDirectory() as tmpdir:
             src = Path(tmpdir) / "src"
             dst = Path(tmpdir) / "dst"
@@ -364,10 +376,10 @@ class TestConfigManagerValidation:
             dst.mkdir()
             action = SyncAction(name="test", src_path=str(src), dst_path=str(dst))
             manager.config.actions.append(action)
-        
-        is_valid, errors, warnings = manager.validate()
-        assert is_valid
-        assert errors == []
+
+            is_valid, errors, warnings = manager.validate()
+            assert is_valid
+            assert errors == []
 
 
 # --- SyncAction.validate() method ---

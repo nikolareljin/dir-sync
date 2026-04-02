@@ -113,10 +113,14 @@ class TestConfigManager:
         config_path = tmp_path / "config.yml"
         manager = ConfigManager(path=config_path)
         manager.config.actions = []
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
         sample = SyncAction(
             name="sample",
-            src_path=str(tmp_path / "src"),
-            dst_path=str(tmp_path / "dst"),
+            src_path=str(src),
+            dst_path=str(dst),
             method="one_way",
             action_type="manual",
         )
@@ -130,10 +134,14 @@ class TestConfigManager:
     def test_roundtrip_with_includes_excludes(self, tmp_path):
         config_path = tmp_path / "config.yml"
         manager = ConfigManager(path=config_path)
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
         action = SyncAction(
             name="filtered",
-            src_path="/src",
-            dst_path="/dst",
+            src_path=str(src),
+            dst_path=str(dst),
             includes=["*.py", "docs/*"],
             excludes=["*.pyc", "__pycache__/*"],
         )
@@ -149,8 +157,12 @@ class TestConfigManager:
         config_path = tmp_path / "config.yml"
         export_path = tmp_path / "exports" / "export.yml"
         manager = ConfigManager(path=config_path)
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
         manager.config.add_action(
-            SyncAction(name="exp", src_path="/a", dst_path="/b", method="one_way")
+            SyncAction(name="exp", src_path=str(src), dst_path=str(dst), method="one_way")
         )
         manager.save()
         manager.export(export_path)
@@ -172,10 +184,7 @@ class TestConfigManager:
         manager.config.actions = []
         manager.ensure_default()
         assert len(manager.config.actions) == 1
-        # Default action name might be "documents-backup" or "home-backup" depending on Documents folder existence
-        name = manager.config.actions[0].name
-        assert name in ("documents-backup", "home-backup")
-        # Both should use a directory under dir-sync-backups
+        assert manager.config.actions[0].name == "documents-backup"
         assert "dir-sync-backups" in manager.config.actions[0].dst_path
 
     def test_ensure_default_noop_when_actions_exist(self, tmp_path):
@@ -198,10 +207,14 @@ def test_config_persists_device_binding_fields(tmp_path):
     config_path = tmp_path / "config.yml"
     manager = ConfigManager(path=config_path)
     manager.config.actions = []
+    src = tmp_path / "src"
+    dst = tmp_path / "dst"
+    src.mkdir()
+    dst.mkdir()
     sample = SyncAction(
         name="usb-sync",
-        src_path=str(tmp_path / "src"),
-        dst_path=str(tmp_path / "dst"),
+        src_path=str(src),
+        dst_path=str(dst),
         method="one_way",
         action_type="auto_on_destination",
         dst_device_id="8D06-A5B2",

@@ -176,24 +176,26 @@ class ConfigManager:
 
     def ensure_default(self) -> None:
         if not self.config.actions:
-            # Try to find an existing directory for the default backup
-            # Use Documents if it exists, otherwise fall back to home
             home = Path.home()
             docs = home / "Documents"
+            fallback_src = home / "dir-sync-source"
             if docs.exists() and docs.is_dir():
-                default_src = str(docs)
+                default_src = docs
             else:
-                # Fallback to home if Documents doesn't exist
-                default_src = str(home)
-            
-            # Destination is always under dir-sync-backups subfolder
+                try:
+                    docs.mkdir(parents=True, exist_ok=True)
+                    default_src = docs
+                except OSError:
+                    fallback_src.mkdir(parents=True, exist_ok=True)
+                    default_src = fallback_src
+
             dst_path = home / "dir-sync-backups"
             if not dst_path.exists():
                 dst_path.mkdir(parents=True, exist_ok=True)
-            
+
             sample = SyncAction(
                 name="documents-backup",
-                src_path=default_src,
+                src_path=str(default_src),
                 dst_path=str(dst_path / "documents"),
                 method="one_way",
                 action_type="manual",

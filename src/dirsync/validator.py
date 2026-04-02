@@ -1,7 +1,5 @@
-import os
 import sys
 from pathlib import Path
-from typing import Tuple
 
 from croniter import croniter
 
@@ -214,7 +212,7 @@ class ConfigValidator:
 
             # Validate individual action
             validator = PreflightValidator()
-            is_valid, errors, warnings = validator.validate_action(action, action_name=action.name)
+            is_valid, errors, warnings = validator.validate_action(action)
             # Prefix errors and warnings with action name for clarity
             for err in errors:
                 self.errors.append("Action '{}': {}".format(action.name, err))
