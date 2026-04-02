@@ -303,30 +303,27 @@ class TestConfigManagerValidation:
         config_path = tmp_path / "config.yml"
         manager = ConfigManager(path=config_path)
         manager.config.actions = []
-        
-        # Add invalid action (same src/dst in temp dir)
+
         with TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "path"
             path.mkdir()
             invalid_action = SyncAction(name="bad", src_path=str(path), dst_path=str(path))
             manager.config.actions.append(invalid_action)
-        
-        with pytest.raises(ValueError, match="validation failed"):
-            manager.save()
+
+            with pytest.raises(ValueError, match="validation failed"):
+                manager.save()
 
     def test_save_with_validation_disabled(self, tmp_path):
         config_path = tmp_path / "config.yml"
         manager = ConfigManager(path=config_path, skip_validation=True)
         manager.config.actions = []
-        
-        # Add invalid action in temp dir
+
         with TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "path"
             path.mkdir()
             invalid_action = SyncAction(name="bad", src_path=str(path), dst_path=str(path))
             manager.config.actions.append(invalid_action)
-        
-        # Should not raise
+
         manager.save()
         assert config_path.exists()
 
@@ -334,15 +331,14 @@ class TestConfigManagerValidation:
         config_path = tmp_path / "config.yml"
         manager = ConfigManager(path=config_path)
         manager.config.actions = []
-        
-        # Add invalid action in temp dir
+
         with TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "path"
             path.mkdir()
             invalid_action = SyncAction(name="bad", src_path=str(path), dst_path=str(path))
-        
-        with pytest.raises(ValueError, match="validation failed"):
-            manager.add_action(invalid_action)
+
+            with pytest.raises(ValueError, match="validation failed"):
+                manager.add_action(invalid_action)
 
     def test_ensure_default_creates_safe_config(self, tmp_path, monkeypatch):
         config_path = tmp_path / "config.yml"

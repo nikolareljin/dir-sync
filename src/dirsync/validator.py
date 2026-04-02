@@ -16,9 +16,9 @@ class PreflightValidator:
     - destructive profile warnings
     """
 
-    # Paths that are dangerous to use as destinations for automatic sync
-    # Note: Excludes /home to avoid false positives for normal user destinations
-    # On Windows: C:\Windows, C:\Program Files, etc. are handled via Path.drive checks
+    # Paths that are dangerous to use as destinations for automatic sync.
+    # Note: Excludes /home to avoid false positives for normal user destinations.
+    # On Windows, dangerous system paths are handled via WINDOWS_DANGEROUS_DESTINATIONS.
     DANGEROUS_DESTINATIONS = (
         "/",
         "/etc",
@@ -105,7 +105,7 @@ class PreflightValidator:
         if self._is_subpath(src_expanded, dst_expanded):
             self.errors.append(
                 "Source is nested inside destination. "
-                "This may cause unexpected deletions during two-way sync."
+                "This may cause unexpected deletions during sync."
             )
 
         # Check for dangerous destination paths
