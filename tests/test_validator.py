@@ -1,10 +1,10 @@
-import pytest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import pytest
+
 from dirsync.config import ConfigManager, SyncAction
 from dirsync.validator import ConfigValidator, PreflightValidator
-
 
 # --- PreflightValidator: Basic Path Validation ---
 

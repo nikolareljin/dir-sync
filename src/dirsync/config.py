@@ -109,8 +109,9 @@ class ConfigManager:
         if validate and not self.skip_validation:
             is_valid, errors, warnings = self.validate()
             if not is_valid:
+                error_lines = "\n".join("  - {}".format(e) for e in errors)
                 raise ValueError(
-                    "Configuration validation failed:\n" + "\n".join("  - {}".format(e) for e in errors)
+                    "Configuration validation failed:\n" + error_lines
                 )
             # Log warnings but don't block save
             for warning in warnings:
@@ -128,8 +129,9 @@ class ConfigManager:
         if validate and not self.skip_validation:
             is_valid, errors, warnings = self.validate()
             if not is_valid:
+                error_lines = "\n".join("  - {}".format(e) for e in errors)
                 raise ValueError(
-                    "Configuration validation failed:\n" + "\n".join("  - {}".format(e) for e in errors)
+                    "Configuration validation failed:\n" + error_lines
                 )
 
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -162,8 +164,9 @@ class ConfigManager:
             validator = ConfigValidator()
             is_valid, errors, warnings = validator.validate_config(temp_config.actions)
             if not is_valid:
+                error_lines = "\n".join("  - {}".format(e) for e in errors)
                 raise ValueError(
-                    "Configuration validation failed:\n" + "\n".join("  - {}".format(e) for e in errors)
+                    "Configuration validation failed:\n" + error_lines
                 )
             # Log warnings but don't block import
             for warning in warnings:

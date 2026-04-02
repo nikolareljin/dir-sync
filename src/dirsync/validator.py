@@ -82,7 +82,9 @@ class PreflightValidator:
         if not src_expanded.exists():
             self.errors.append(
                 "Source path does not exist: '{}'. "
-                "Please ensure the source directory exists before creating a sync action.".format(src_expanded)
+                "Please ensure the source directory exists before creating a sync action.".format(
+                    src_expanded
+                )
             )
 
         # Check source equals destination
@@ -129,7 +131,9 @@ class PreflightValidator:
                     self.errors.append(
                         "Invalid cron expression: '{}'. "
                         "Croniter error: {}. "
-                        "Please use valid cron format (e.g., '0 2 * * *').".format(action.schedule, e)
+                        "Please use valid cron format (e.g., '0 2 * * *').".format(
+                            action.schedule, e
+                        )
                     )
 
         # Check method-specific requirements
