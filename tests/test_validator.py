@@ -97,7 +97,7 @@ class TestPreflightValidatorCron:
                 src_path=str(src),
                 dst_path=str(dst),
                 action_type="scheduled",
-                schedule="0 2 * * *"
+                schedule="0 2 * * *",
             )
             validator = PreflightValidator()
             is_valid, errors, warnings = validator.validate_action(action)
@@ -115,7 +115,7 @@ class TestPreflightValidatorCron:
                 src_path=str(src),
                 dst_path=str(dst),
                 action_type="scheduled",
-                schedule="invalid cron"
+                schedule="invalid cron",
             )
             validator = PreflightValidator()
             is_valid, errors, warnings = validator.validate_action(action)
@@ -133,7 +133,7 @@ class TestPreflightValidatorCron:
                 src_path=str(src),
                 dst_path=str(dst),
                 action_type="scheduled",
-                schedule="99 * * * *"
+                schedule="99 * * * *",
             )
             validator = PreflightValidator()
             is_valid, errors, warnings = validator.validate_action(action)
@@ -151,7 +151,7 @@ class TestPreflightValidatorCron:
                     src_path=str(src),
                     dst_path=str(dst),
                     action_type="scheduled",
-                    schedule=special
+                    schedule=special,
                 )
                 validator = PreflightValidator()
                 is_valid, errors, warnings = validator.validate_action(action)
@@ -168,7 +168,7 @@ class TestPreflightValidatorCron:
                 src_path=str(src),
                 dst_path=str(dst),
                 action_type="scheduled",
-                schedule="*/15 * * * *"  # Every 15 minutes
+                schedule="*/15 * * * *",  # Every 15 minutes
             )
             validator = PreflightValidator()
             is_valid, errors, warnings = validator.validate_action(action)
@@ -185,7 +185,7 @@ class TestPreflightValidatorCron:
                 src_path=str(src),
                 dst_path=str(dst),
                 action_type="scheduled",
-                schedule="0 9-17 * * 1-5"  # Business hours, weekdays
+                schedule="0 9-17 * * 1-5",  # Business hours, weekdays
             )
             validator = PreflightValidator()
             is_valid, errors, warnings = validator.validate_action(action)
@@ -202,7 +202,7 @@ class TestPreflightValidatorCron:
                 src_path=str(src),
                 dst_path=str(dst),
                 action_type="scheduled",
-                schedule="0 9,12,17 * * *"  # 9am, noon, 5pm
+                schedule="0 9,12,17 * * *",  # 9am, noon, 5pm
             )
             validator = PreflightValidator()
             is_valid, errors, warnings = validator.validate_action(action)
@@ -339,6 +339,104 @@ class TestConfigManagerValidation:
 
             with pytest.raises(ValueError, match="validation failed"):
                 manager.add_action(invalid_action)
+
+    def test_add_action_rolls_back_on_configuration_validation_failure(self, tmp_path):
+        config_path = tmp_path / "config.yml"
+        manager = ConfigManager(path=config_path)
+
+        with TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            valid_src = base / "valid-src"
+            valid_dst = base / "valid-dst"
+            valid_src.mkdir()
+            valid_dst.mkdir()
+            existing_action = SyncAction(
+                name="existing", src_path=str(valid_src), dst_path=str(valid_dst)
+            )
+
+            broken_src = base / "broken-src"
+            broken_dst = broken_src / "nested"
+            broken_src.mkdir()
+            broken_dst.mkdir()
+            invalid_existing = SyncAction(
+                name="broken", src_path=str(broken_src), dst_path=str(broken_dst)
+            )
+
+            new_src = base / "new-src"
+            new_dst = base / "new-dst"
+            new_src.mkdir()
+            new_dst.mkdir()
+            new_action = SyncAction(name="new", src_path=str(new_src), dst_path=str(new_dst))
+
+            manager.config.actions = [existing_action, invalid_existing]
+
+            with pytest.raises(ValueError, match="Configuration validation failed"):
+                manager.add_action(new_action)
+
+            assert manager.config.find_action("existing") is not None
+            assert manager.config.find_action("new") is None
+
+    def test_update_action_rolls_back_on_configuration_validation_failure(self, tmp_path):
+        config_path = tmp_path / "config.yml"
+        manager = ConfigManager(path=config_path)
+
+        with TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            src = base / "src"
+            dst = base / "dst"
+            src.mkdir()
+            dst.mkdir()
+            current_action = SyncAction(name="edit", src_path=str(src), dst_path=str(dst))
+
+            broken_src = base / "broken-src"
+            broken_dst = broken_src / "nested"
+            broken_src.mkdir()
+            broken_dst.mkdir()
+            invalid_existing = SyncAction(
+                name="broken", src_path=str(broken_src), dst_path=str(broken_dst)
+            )
+
+            replacement_dst = base / "replacement-dst"
+            replacement_dst.mkdir()
+            updated_action = SyncAction(
+                name="edit", src_path=str(src), dst_path=str(replacement_dst)
+            )
+
+            manager.config.actions = [current_action, invalid_existing]
+
+            with pytest.raises(ValueError, match="Configuration validation failed"):
+                manager.update_action(updated_action)
+
+            action = manager.config.find_action("edit")
+            assert action is not None
+            assert action.src_path == str(src)
+            assert action.dst_path == str(dst)
+
+    def test_remove_action_rolls_back_on_configuration_validation_failure(self, tmp_path):
+        config_path = tmp_path / "config.yml"
+        manager = ConfigManager(path=config_path)
+
+        with TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            src1 = base / "src1"
+            dst1 = base / "dst1"
+            src1.mkdir()
+            dst1.mkdir()
+            src2 = base / "src2"
+            dst2 = src2 / "nested"
+            src2.mkdir()
+            dst2.mkdir()
+
+            valid_action = SyncAction(name="valid", src_path=str(src1), dst_path=str(dst1))
+            invalid_action = SyncAction(name="invalid", src_path=str(src2), dst_path=str(dst2))
+
+            manager.config.actions = [valid_action, invalid_action]
+
+            with pytest.raises(ValueError, match="Configuration validation failed"):
+                manager.remove_action("valid")
+
+            assert manager.config.find_action("valid") is not None
+            assert manager.config.find_action("invalid") is not None
 
     def test_ensure_default_creates_safe_config(self, tmp_path, monkeypatch):
         config_path = tmp_path / "config.yml"

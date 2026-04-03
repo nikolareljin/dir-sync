@@ -6,7 +6,7 @@ from croniter import croniter
 
 class PreflightValidator:
     """Validates sync actions before they can be saved or executed.
-    
+
     Blocks invalid or dangerous sync definitions covering:
     - source equals destination
     - destination nested inside source (would cause recursion)
@@ -47,10 +47,10 @@ class PreflightValidator:
 
     def validate_action(self, action):
         """Validate a single sync action.
-        
+
         Args:
             action: SyncAction to validate
-            
+
         Returns:
             Tuple of (is_valid, errors, warnings)
         """
@@ -66,8 +66,12 @@ class PreflightValidator:
             self.errors.append("Destination path is missing or empty")
 
         # If we have empty paths, return early to avoid misleading errors
-        if not action.src_path or not str(action.src_path).strip() or \
-           not action.dst_path or not str(action.dst_path).strip():
+        if (
+            not action.src_path
+            or not str(action.src_path).strip()
+            or not action.dst_path
+            or not str(action.dst_path).strip()
+        ):
             return False, self.errors, self.warnings
 
         # Normalize paths for comparison
@@ -90,8 +94,7 @@ class PreflightValidator:
         # Check source equals destination
         if src_expanded == dst_expanded:
             self.errors.append(
-                "Source and destination paths are identical. "
-                "This would cause data loss."
+                "Source and destination paths are identical. " "This would cause data loss."
             )
 
         # Check destination nested inside source (recursion risk)
@@ -136,13 +139,6 @@ class PreflightValidator:
                         )
                     )
 
-        # Check method-specific requirements
-        if action.method == "two_way":
-            if not action.src_path or not action.dst_path:
-                self.errors.append(
-                    "Two-way sync requires both source and destination paths."
-                )
-
         # Check for destructive profile
         if action.method == "one_way" and self._looks_like_destructive_sync(action):
             self.warnings.append(
@@ -163,17 +159,17 @@ class PreflightValidator:
 
     def _is_dangerous_destination(self, path):
         """Check if path is a dangerous system location.
-        
+
         Handles both Unix-style paths and Windows paths.
         """
         path_str = str(path)
-        
+
         # Check Unix-style dangerous destinations
         if path_str in self.DANGEROUS_DESTINATIONS or any(
             path_str.startswith(dangerous + "/") for dangerous in self.DANGEROUS_DESTINATIONS
         ):
             return True
-        
+
         # Check Windows-style dangerous destinations
         if sys.platform.startswith("win"):
             path_upper = path_str.upper()
@@ -181,7 +177,7 @@ class PreflightValidator:
                 dangerous_upper = dangerous.upper()
                 if path_upper == dangerous_upper or path_upper.startswith(dangerous_upper + "\\"):
                     return True
-        
+
         return False
 
     def _looks_like_destructive_sync(self, action):
@@ -200,7 +196,7 @@ class ConfigValidator:
 
     def validate_config(self, actions):
         """Validate a list of sync actions for cross-action issues.
-        
+
         Returns:
             Tuple of (is_valid, errors, warnings)
         """
@@ -216,7 +212,7 @@ class ConfigValidator:
 
             # Validate individual action
             validator = PreflightValidator()
-            is_valid, errors, warnings = validator.validate_action(action)
+            _is_valid, errors, warnings = validator.validate_action(action)
             # Prefix errors and warnings with action name for clarity
             for err in errors:
                 self.errors.append("Action '{}': {}".format(action.name, err))

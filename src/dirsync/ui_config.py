@@ -300,19 +300,25 @@ class ConfigWindow:
                 dst_device_id=dst_device_id_var.get().strip() or None,
                 dst_path_on_device=dst_path_on_device_var.get().strip() or None,
             )
-            if create:
-                self.manager.config.add_action(payload)
-            else:
-                self.manager.config.update_action(payload)
-            self.manager.save()
+            try:
+                if create:
+                    self.manager.add_action(payload)
+                else:
+                    self.manager.update_action(payload)
+            except ValueError as exc:
+                alert(str(exc))
+                return
             root.destroy()
 
         def on_delete():
             if create:
                 root.destroy()
                 return
-            self.manager.config.remove_action(action.name)
-            self.manager.save()
+            try:
+                self.manager.remove_action(action.name)
+            except ValueError as exc:
+                alert(str(exc))
+                return
             root.destroy()
 
         action_buttons = ttk.Frame(content)

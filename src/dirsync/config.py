@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -45,7 +46,7 @@ class SyncAction:
 
     def validate(self) -> Tuple[bool, List[str], List[str]]:
         """Validate this action using preflight validation.
-        
+
         Returns:
             Tuple of (is_valid, errors, warnings)
         """
@@ -101,7 +102,7 @@ class ConfigManager:
 
     def save(self, validate: bool = True) -> None:
         """Save configuration with optional validation.
-        
+
         Args:
             validate: If True, run preflight validation before saving.
                      Raises ValueError if validation fails.
@@ -110,9 +111,7 @@ class ConfigManager:
             is_valid, errors, warnings = self.validate()
             if not is_valid:
                 error_lines = "\n".join("  - {}".format(e) for e in errors)
-                raise ValueError(
-                    "Configuration validation failed:\n" + error_lines
-                )
+                raise ValueError("Configuration validation failed:\n" + error_lines)
             # Log warnings but don't block save
             for warning in warnings:
                 _logger.warning("Config warning: %s", warning)
@@ -130,9 +129,9 @@ class ConfigManager:
             is_valid, errors, warnings = self.validate()
             if not is_valid:
                 error_lines = "\n".join("  - {}".format(e) for e in errors)
-                raise ValueError(
-                    "Configuration validation failed:\n" + error_lines
-                )
+                raise ValueError("Configuration validation failed:\n" + error_lines)
+            for warning in warnings:
+                _logger.warning("Config warning: %s", warning)
 
         target.parent.mkdir(parents=True, exist_ok=True)
         with target.open("w", encoding="utf-8") as handle:
@@ -148,30 +147,28 @@ class ConfigManager:
 
     def import_file(self, source: Path, validate: bool = True) -> SyncConfig:
         """Import configuration from a file with optional validation.
-        
+
         Note: Validates imported config BEFORE mutating manager state to prevent
         partial state corruption on validation failure.
         """
         with source.open("r", encoding="utf-8") as handle:
             payload = yaml.safe_load(handle) or {}  # Default to empty dict if file is empty
         actions = [SyncAction(**item).normalize() for item in payload.get("actions", [])]
-        
+
         # Create temporary config for validation (don't mutate self.config yet)
         temp_config = SyncConfig(sync_tool=payload.get("sync_tool", "rsync"), actions=actions)
-        
+
         if validate and not self.skip_validation:
             # Validate the temp config before assigning
             validator = ConfigValidator()
             is_valid, errors, warnings = validator.validate_config(temp_config.actions)
             if not is_valid:
                 error_lines = "\n".join("  - {}".format(e) for e in errors)
-                raise ValueError(
-                    "Configuration validation failed:\n" + error_lines
-                )
+                raise ValueError("Configuration validation failed:\n" + error_lines)
             # Log warnings but don't block import
             for warning in warnings:
-                logging.warning("Config warning: %s", warning)
-        
+                _logger.warning("Config warning: %s", warning)
+
         # Only mutate state after validation passes
         self.config = temp_config
         self.save(validate=False)  # Already validated
@@ -203,17 +200,21 @@ class ConfigManager:
                 method="one_way",
                 action_type="manual",
             )
-            self.config.actions.append(sample)
-            self.save()
+            self.add_action(sample, validate=not self.skip_validation)
 
     def validate(self) -> Tuple[bool, List[str], List[str]]:
         """Validate entire configuration using preflight validation.
-        
+
         Returns:
             Tuple of (is_valid, errors, warnings)
         """
         validator = ConfigValidator()
         return validator.validate_config(self.config.actions)
+
+    def _validate_actions(self, actions: List[SyncAction]) -> Tuple[bool, List[str], List[str]]:
+        """Validate a prospective action list without mutating manager state."""
+        validator = ConfigValidator()
+        return validator.validate_config(actions)
 
     def add_action(self, action: SyncAction, validate: bool = True) -> None:
         """Add an action with optional validation."""
@@ -223,6 +224,18 @@ class ConfigManager:
                 raise ValueError(
                     "Action validation failed:\n" + "\n".join("  - {}".format(e) for e in errors)
                 )
+            for warning in warnings:
+                _logger.warning("Action '%s' warning: %s", action.name, warning)
+
+            candidate_config = deepcopy(self.config)
+            candidate_config.add_action(deepcopy(action))
+            is_valid, errors, warnings = self._validate_actions(candidate_config.actions)
+            if not is_valid:
+                error_lines = "\n".join("  - {}".format(e) for e in errors)
+                raise ValueError("Configuration validation failed:\n" + error_lines)
+            for warning in warnings:
+                _logger.warning("Config warning: %s", warning)
+
         self.config.add_action(action)
         self.save(validate=validate)
 
@@ -234,7 +247,34 @@ class ConfigManager:
                 raise ValueError(
                     "Action validation failed:\n" + "\n".join("  - {}".format(e) for e in errors)
                 )
+            for warning in warnings:
+                _logger.warning("Action '%s' warning: %s", action.name, warning)
+
+            candidate_config = deepcopy(self.config)
+            candidate_config.update_action(deepcopy(action))
+            is_valid, errors, warnings = self._validate_actions(candidate_config.actions)
+            if not is_valid:
+                error_lines = "\n".join("  - {}".format(e) for e in errors)
+                raise ValueError("Configuration validation failed:\n" + error_lines)
+            for warning in warnings:
+                _logger.warning("Config warning: %s", warning)
+
         self.config.update_action(action)
+        self.save(validate=validate)
+
+    def remove_action(self, name: str, validate: bool = True) -> None:
+        """Remove an action with optional validation of the resulting config."""
+        if validate and not self.skip_validation:
+            candidate_config = deepcopy(self.config)
+            candidate_config.remove_action(name)
+            is_valid, errors, warnings = self._validate_actions(candidate_config.actions)
+            if not is_valid:
+                error_lines = "\n".join("  - {}".format(e) for e in errors)
+                raise ValueError("Configuration validation failed:\n" + error_lines)
+            for warning in warnings:
+                _logger.warning("Config warning: %s", warning)
+
+        self.config.remove_action(name)
         self.save(validate=validate)
 
 
