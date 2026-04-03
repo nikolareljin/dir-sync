@@ -153,6 +153,8 @@ class ConfigManager:
         """
         with source.open("r", encoding="utf-8") as handle:
             payload = yaml.safe_load(handle) or {}  # Default to empty dict if file is empty
+        if not isinstance(payload, dict):
+            raise ValueError("Imported configuration must be a YAML mapping at the top level.")
         actions = [SyncAction(**item).normalize() for item in payload.get("actions", [])]
 
         # Create temporary config for validation (don't mutate self.config yet)

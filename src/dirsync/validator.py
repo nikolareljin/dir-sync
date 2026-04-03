@@ -1,7 +1,14 @@
-import sys
+from __future__ import annotations
+
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from croniter import croniter
+
+from .constants import IS_WINDOWS
+
+if TYPE_CHECKING:
+    from .config import SyncAction
 
 
 class PreflightValidator:
@@ -41,11 +48,11 @@ class PreflightValidator:
         "C:\\Users\\Public",
     )
 
-    def __init__(self):
-        self.errors = []
-        self.warnings = []
+    def __init__(self) -> None:
+        self.errors: list[str] = []
+        self.warnings: list[str] = []
 
-    def validate_action(self, action):
+    def validate_action(self, action: SyncAction) -> tuple[bool, list[str], list[str]]:
         """Validate a single sync action.
 
         Args:
@@ -149,7 +156,7 @@ class PreflightValidator:
         is_valid = len(self.errors) == 0
         return is_valid, self.errors, self.warnings
 
-    def _is_subpath(self, path, parent):
+    def _is_subpath(self, path: Path, parent: Path) -> bool:
         """Check if path is a subpath of parent."""
         try:
             path.relative_to(parent)
@@ -157,7 +164,7 @@ class PreflightValidator:
         except ValueError:
             return False
 
-    def _is_dangerous_destination(self, path):
+    def _is_dangerous_destination(self, path: Path) -> bool:
         """Check if path is a dangerous system location.
 
         Handles both Unix-style paths and Windows paths.
@@ -171,7 +178,7 @@ class PreflightValidator:
             return True
 
         # Check Windows-style dangerous destinations
-        if sys.platform.startswith("win"):
+        if IS_WINDOWS:
             path_upper = path_str.upper()
             for dangerous in self.WINDOWS_DANGEROUS_DESTINATIONS:
                 dangerous_upper = dangerous.upper()
@@ -180,7 +187,7 @@ class PreflightValidator:
 
         return False
 
-    def _looks_like_destructive_sync(self, action):
+    def _looks_like_destructive_sync(self, action: SyncAction) -> bool:
         """Check if sync configuration looks potentially destructive."""
         # One-way sync with no filters to a non-empty-appearing destination
         has_no_filters = not action.includes and not action.excludes
@@ -190,11 +197,11 @@ class PreflightValidator:
 class ConfigValidator:
     """Validates entire configuration for cross-action issues."""
 
-    def __init__(self):
-        self.errors = []
-        self.warnings = []
+    def __init__(self) -> None:
+        self.errors: list[str] = []
+        self.warnings: list[str] = []
 
-    def validate_config(self, actions):
+    def validate_config(self, actions: list[SyncAction]) -> tuple[bool, list[str], list[str]]:
         """Validate a list of sync actions for cross-action issues.
 
         Returns:
