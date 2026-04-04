@@ -189,7 +189,7 @@ class PreflightValidator:
 
     def _looks_like_destructive_sync(self, action: SyncAction) -> bool:
         """Check if sync configuration looks potentially destructive."""
-        # One-way sync with no filters to a non-empty-appearing destination
+        # Current heuristic: flag syncs with no include/exclude filters.
         has_no_filters = not action.includes and not action.excludes
         return has_no_filters
 

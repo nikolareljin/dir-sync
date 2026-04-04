@@ -220,6 +220,7 @@ class ConfigManager:
 
     def add_action(self, action: SyncAction, validate: bool = True) -> None:
         """Add an action with optional validation."""
+        save_validate = validate
         if validate and not self.skip_validation:
             is_valid, errors, warnings = action.validate()
             if not is_valid:
@@ -237,12 +238,14 @@ class ConfigManager:
                 raise ValueError("Configuration validation failed:\n" + error_lines)
             for warning in warnings:
                 _logger.warning("Config warning: %s", warning)
+            save_validate = False
 
         self.config.add_action(action)
-        self.save(validate=validate)
+        self.save(validate=save_validate)
 
     def update_action(self, action: SyncAction, validate: bool = True) -> None:
         """Update an action with optional validation."""
+        save_validate = validate
         if validate and not self.skip_validation:
             is_valid, errors, warnings = action.validate()
             if not is_valid:
@@ -260,12 +263,14 @@ class ConfigManager:
                 raise ValueError("Configuration validation failed:\n" + error_lines)
             for warning in warnings:
                 _logger.warning("Config warning: %s", warning)
+            save_validate = False
 
         self.config.update_action(action)
-        self.save(validate=validate)
+        self.save(validate=save_validate)
 
     def remove_action(self, name: str, validate: bool = True) -> None:
         """Remove an action with optional validation of the resulting config."""
+        save_validate = validate
         if validate and not self.skip_validation:
             candidate_config = deepcopy(self.config)
             candidate_config.remove_action(name)
@@ -275,9 +280,10 @@ class ConfigManager:
                 raise ValueError("Configuration validation failed:\n" + error_lines)
             for warning in warnings:
                 _logger.warning("Config warning: %s", warning)
+            save_validate = False
 
         self.config.remove_action(name)
-        self.save(validate=validate)
+        self.save(validate=save_validate)
 
 
 __all__ = [
