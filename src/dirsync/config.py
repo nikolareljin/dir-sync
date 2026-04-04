@@ -155,7 +155,17 @@ class ConfigManager:
             payload = yaml.safe_load(handle) or {}  # Default to empty dict if file is empty
         if not isinstance(payload, dict):
             raise ValueError("Imported configuration must be a YAML mapping at the top level.")
-        actions = [SyncAction(**item).normalize() for item in payload.get("actions", [])]
+        raw_actions = payload.get("actions", [])
+        if not isinstance(raw_actions, list):
+            raise ValueError("Imported configuration field 'actions' must be a list.")
+
+        actions = []
+        for index, item in enumerate(raw_actions):
+            if not isinstance(item, dict):
+                raise ValueError(
+                    f"Imported configuration action at index {index} must be a mapping."
+                )
+            actions.append(SyncAction(**item).normalize())
 
         # Create temporary config for validation (don't mutate self.config yet)
         temp_config = SyncConfig(sync_tool=payload.get("sync_tool", "rsync"), actions=actions)
