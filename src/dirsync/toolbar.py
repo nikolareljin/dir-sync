@@ -195,7 +195,11 @@ class ToolbarController:
         root.destroy()
         if not target:
             return
-        self.manager.export(Path(target))
+        try:
+            self.manager.export(Path(target))
+        except ValueError as exc:
+            alert(str(exc))
+            return
         alert(f"Exported config to {target}")
 
     def _import_config(self):

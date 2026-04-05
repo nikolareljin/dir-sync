@@ -212,7 +212,7 @@ class TestPreflightValidatorCron:
                 schedule="0 9-17 * * 1-5",  # Business hours, weekdays
             )
             validator = PreflightValidator()
-            is_valid, _errors, warnings = validator.validate_action(action)
+            is_valid, _errors, _warnings = validator.validate_action(action)
             assert is_valid
 
     def test_cron_with_lists_passes(self):
