@@ -16,7 +16,7 @@ class TestPreflightValidatorBasicPaths:
             path.mkdir()
             action = SyncAction(name="test", src_path=str(path), dst_path=str(path))
             validator = PreflightValidator()
-            is_valid, errors, warnings = validator.validate_action(action)
+            is_valid, errors, _warnings = validator.validate_action(action)
             assert not is_valid
             assert any("identical" in e.lower() for e in errors)
 
@@ -28,7 +28,7 @@ class TestPreflightValidatorBasicPaths:
             dst.mkdir()
             action = SyncAction(name="test", src_path=str(src), dst_path=str(dst))
             validator = PreflightValidator()
-            is_valid, errors, warnings = validator.validate_action(action)
+            is_valid, errors, _warnings = validator.validate_action(action)
             assert not is_valid
             assert any("recursion" in e.lower() for e in errors)
 
@@ -40,21 +40,21 @@ class TestPreflightValidatorBasicPaths:
             src.mkdir()
             action = SyncAction(name="test", src_path=str(src), dst_path=str(dst))
             validator = PreflightValidator()
-            is_valid, errors, warnings = validator.validate_action(action)
+            is_valid, errors, _warnings = validator.validate_action(action)
             assert not is_valid
             assert any("nested" in e.lower() for e in errors)
 
     def test_missing_source_fails(self):
         action = SyncAction(name="test", src_path="", dst_path="/dest")
         validator = PreflightValidator()
-        is_valid, errors, warnings = validator.validate_action(action)
+        is_valid, errors, _warnings = validator.validate_action(action)
         assert not is_valid
         assert any("source" in e.lower() and "missing" in e.lower() for e in errors)
 
     def test_missing_destination_fails(self):
         action = SyncAction(name="test", src_path="/src", dst_path="")
         validator = PreflightValidator()
-        is_valid, errors, warnings = validator.validate_action(action)
+        is_valid, errors, _warnings = validator.validate_action(action)
         assert not is_valid
         assert any("destination" in e.lower() and "missing" in e.lower() for e in errors)
 
@@ -65,7 +65,7 @@ class TestPreflightValidatorBasicPaths:
             dst.mkdir()
             action = SyncAction(name="test", src_path=str(nonexistent), dst_path=str(dst))
             validator = PreflightValidator()
-            is_valid, errors, warnings = validator.validate_action(action)
+            is_valid, errors, _warnings = validator.validate_action(action)
             assert not is_valid
             assert any("not exist" in e.lower() or "source" in e.lower() for e in errors)
 
@@ -77,7 +77,7 @@ class TestPreflightValidatorBasicPaths:
             dst.mkdir()
             action = SyncAction(name="test", src_path=str(src_file), dst_path=str(dst))
             validator = PreflightValidator()
-            is_valid, errors, warnings = validator.validate_action(action)
+            is_valid, errors, _warnings = validator.validate_action(action)
             assert not is_valid
             assert any("source path must be a directory" in e.lower() for e in errors)
 
@@ -89,7 +89,7 @@ class TestPreflightValidatorBasicPaths:
             dst_file.write_text("data", encoding="utf-8")
             action = SyncAction(name="test", src_path=str(src), dst_path=str(dst_file))
             validator = PreflightValidator()
-            is_valid, errors, warnings = validator.validate_action(action)
+            is_valid, errors, _warnings = validator.validate_action(action)
             assert not is_valid
             assert any("destination path must be a directory" in e.lower() for e in errors)
 
@@ -101,7 +101,7 @@ class TestPreflightValidatorBasicPaths:
             dst.mkdir()
             action = SyncAction(name="test", src_path=str(src), dst_path=str(dst))
             validator = PreflightValidator()
-            is_valid, errors, warnings = validator.validate_action(action)
+            is_valid, errors, _warnings = validator.validate_action(action)
             assert is_valid
             assert errors == []
 
@@ -124,7 +124,7 @@ class TestPreflightValidatorCron:
                 schedule="0 2 * * *",
             )
             validator = PreflightValidator()
-            is_valid, errors, warnings = validator.validate_action(action)
+            is_valid, errors, _warnings = validator.validate_action(action)
             assert is_valid
             assert errors == []
 
@@ -142,7 +142,7 @@ class TestPreflightValidatorCron:
                 schedule="invalid cron",
             )
             validator = PreflightValidator()
-            is_valid, errors, warnings = validator.validate_action(action)
+            is_valid, errors, _warnings = validator.validate_action(action)
             assert not is_valid
             assert any("cron" in e.lower() and "invalid" in e.lower() for e in errors)
 
@@ -160,7 +160,7 @@ class TestPreflightValidatorCron:
                 schedule="99 * * * *",
             )
             validator = PreflightValidator()
-            is_valid, errors, warnings = validator.validate_action(action)
+            is_valid, _errors, _warnings = validator.validate_action(action)
             assert not is_valid
 
     def test_special_cron_expressions_pass(self):
@@ -178,7 +178,7 @@ class TestPreflightValidatorCron:
                     schedule=special,
                 )
                 validator = PreflightValidator()
-                is_valid, errors, warnings = validator.validate_action(action)
+                is_valid, _errors, _warnings = validator.validate_action(action)
                 assert is_valid, "Failed for {}".format(special)
 
     def test_cron_with_steps_passes(self):
@@ -195,7 +195,7 @@ class TestPreflightValidatorCron:
                 schedule="*/15 * * * *",  # Every 15 minutes
             )
             validator = PreflightValidator()
-            is_valid, errors, warnings = validator.validate_action(action)
+            is_valid, _errors, _warnings = validator.validate_action(action)
             assert is_valid
 
     def test_cron_with_ranges_passes(self):
@@ -212,7 +212,7 @@ class TestPreflightValidatorCron:
                 schedule="0 9-17 * * 1-5",  # Business hours, weekdays
             )
             validator = PreflightValidator()
-            is_valid, errors, warnings = validator.validate_action(action)
+            is_valid, _errors, warnings = validator.validate_action(action)
             assert is_valid
 
     def test_cron_with_lists_passes(self):
@@ -229,7 +229,7 @@ class TestPreflightValidatorCron:
                 schedule="0 9,12,17 * * *",  # 9am, noon, 5pm
             )
             validator = PreflightValidator()
-            is_valid, errors, warnings = validator.validate_action(action)
+            is_valid, errors, _warnings = validator.validate_action(action)
             assert is_valid
 
 
@@ -295,7 +295,7 @@ class TestConfigValidator:
                 SyncAction(name="dup", src_path=str(src2), dst_path=str(dst2)),
             ]
             validator = ConfigValidator()
-            is_valid, errors, warnings = validator.validate_config(actions)
+            is_valid, errors, _warnings = validator.validate_config(actions)
             assert not is_valid
             assert any("duplicate" in e.lower() for e in errors)
 
@@ -314,7 +314,7 @@ class TestConfigValidator:
                 SyncAction(name="action2", src_path=str(src2), dst_path=str(dst2)),
             ]
             validator = ConfigValidator()
-            is_valid, errors, warnings = validator.validate_config(actions)
+            is_valid, errors, _warnings = validator.validate_config(actions)
             assert is_valid
             assert errors == []
 
@@ -479,7 +479,7 @@ class TestConfigManagerValidation:
         assert action.name == "documents-backup"
         assert "dir-sync-backups" in action.dst_path
         assert action.src_path == str(docs_path)
-        is_valid, errors, warnings = action.validate()
+        is_valid, errors, _warnings = action.validate()
         assert is_valid, "Default action failed validation: {}".format(errors)
 
     def test_validate_method(self, tmp_path):
@@ -495,7 +495,7 @@ class TestConfigManagerValidation:
             action = SyncAction(name="test", src_path=str(src), dst_path=str(dst))
             manager.config.actions.append(action)
 
-            is_valid, errors, warnings = manager.validate()
+            is_valid, errors, _warnings = manager.validate()
             assert is_valid
             assert errors == []
 
@@ -511,7 +511,7 @@ class TestSyncActionValidateMethod:
             src.mkdir()
             dst.mkdir()
             action = SyncAction(name="test", src_path=str(src), dst_path=str(dst))
-            is_valid, errors, warnings = action.validate()
+            is_valid, _errors, _warnings = action.validate()
             assert is_valid
 
     def test_validate_method_catches_errors(self):
@@ -519,6 +519,6 @@ class TestSyncActionValidateMethod:
             path = Path(tmpdir) / "path"
             path.mkdir()
             action = SyncAction(name="test", src_path=str(path), dst_path=str(path))
-            is_valid, errors, warnings = action.validate()
+            is_valid, errors, _warnings = action.validate()
             assert not is_valid
             assert len(errors) > 0
