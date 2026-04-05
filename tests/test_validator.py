@@ -69,6 +69,30 @@ class TestPreflightValidatorBasicPaths:
             assert not is_valid
             assert any("not exist" in e.lower() or "source" in e.lower() for e in errors)
 
+    def test_source_file_fails(self):
+        with TemporaryDirectory() as tmpdir:
+            src_file = Path(tmpdir) / "source.txt"
+            dst = Path(tmpdir) / "dst"
+            src_file.write_text("data", encoding="utf-8")
+            dst.mkdir()
+            action = SyncAction(name="test", src_path=str(src_file), dst_path=str(dst))
+            validator = PreflightValidator()
+            is_valid, errors, warnings = validator.validate_action(action)
+            assert not is_valid
+            assert any("source path must be a directory" in e.lower() for e in errors)
+
+    def test_existing_destination_file_fails(self):
+        with TemporaryDirectory() as tmpdir:
+            src = Path(tmpdir) / "src"
+            dst_file = Path(tmpdir) / "dest.txt"
+            src.mkdir()
+            dst_file.write_text("data", encoding="utf-8")
+            action = SyncAction(name="test", src_path=str(src), dst_path=str(dst_file))
+            validator = PreflightValidator()
+            is_valid, errors, warnings = validator.validate_action(action)
+            assert not is_valid
+            assert any("destination path must be a directory" in e.lower() for e in errors)
+
     def test_valid_paths_pass(self):
         with TemporaryDirectory() as tmpdir:
             src = Path(tmpdir) / "src"

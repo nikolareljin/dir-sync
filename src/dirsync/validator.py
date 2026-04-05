@@ -97,6 +97,19 @@ class PreflightValidator:
                     src_expanded
                 )
             )
+        elif not src_expanded.is_dir():
+            self.errors.append(
+                "Source path must be a directory: '{}'. "
+                "File sources are not supported by the sync executor.".format(src_expanded)
+            )
+
+        # If destination exists, it must also be a directory.
+        if dst_expanded.exists() and not dst_expanded.is_dir():
+            self.errors.append(
+                "Destination path must be a directory when it already exists: '{}'. ".format(
+                    dst_expanded
+                )
+            )
 
         # Check source equals destination
         if src_expanded == dst_expanded:

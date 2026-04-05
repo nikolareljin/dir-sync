@@ -202,6 +202,13 @@ class TestConfigManager:
         assert manager.config.actions == []
         assert manager.config.sync_tool == "rsync"
 
+    def test_load_rejects_non_mapping_yaml(self, tmp_path):
+        config_path = tmp_path / "config.yml"
+        config_path.write_text("- not\n- a\n- mapping\n", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="YAML mapping"):
+            ConfigManager(path=config_path)
+
     def test_import_file_rejects_non_mapping_yaml(self, tmp_path):
         config_path = tmp_path / "config.yml"
         source_path = tmp_path / "invalid.yml"

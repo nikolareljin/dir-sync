@@ -96,6 +96,8 @@ class ConfigManager:
     def load(self) -> SyncConfig:
         with self.path.open("r", encoding="utf-8") as handle:
             raw = yaml.safe_load(handle) or {}
+        if not isinstance(raw, dict):
+            raise ValueError("Configuration file must be a YAML mapping at the top level.")
         actions = [SyncAction(**item).normalize() for item in raw.get("actions", [])]
         self.config = SyncConfig(sync_tool=raw.get("sync_tool", "rsync"), actions=actions)
         return self.config
