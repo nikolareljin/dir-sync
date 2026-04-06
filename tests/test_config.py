@@ -212,11 +212,25 @@ class TestConfigManager:
     def test_import_file_rejects_non_mapping_yaml(self, tmp_path):
         config_path = tmp_path / "config.yml"
         source_path = tmp_path / "invalid.yml"
-        source_path.write_text("- not\n- a\n- mapping\n")
+        source_path.write_text("- not\n- a\n- mapping\n", encoding="utf-8")
         manager = ConfigManager(path=config_path)
 
         with pytest.raises(ValueError, match="YAML mapping"):
             manager.import_file(source_path)
+
+    def test_load_rejects_non_list_actions(self, tmp_path):
+        config_path = tmp_path / "config.yml"
+        config_path.write_text("actions: {}\n", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="field 'actions' must be a list"):
+            ConfigManager(path=config_path)
+
+    def test_load_rejects_non_mapping_action_items(self, tmp_path):
+        config_path = tmp_path / "config.yml"
+        config_path.write_text("actions:\n  - valid\n", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="action at index 0 must be a mapping"):
+            ConfigManager(path=config_path)
 
 
 def test_config_persists_device_binding_fields(tmp_path):

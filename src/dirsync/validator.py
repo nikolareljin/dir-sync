@@ -106,7 +106,7 @@ class PreflightValidator:
         # If destination exists, it must also be a directory.
         if dst_expanded.exists() and not dst_expanded.is_dir():
             self.errors.append(
-                "Destination path must be a directory when it already exists: '{}'. ".format(
+                "Destination path must be a directory when it already exists: '{}'.".format(
                     dst_expanded
                 )
             )

@@ -98,7 +98,15 @@ class ConfigManager:
             raw = yaml.safe_load(handle) or {}
         if not isinstance(raw, dict):
             raise ValueError("Configuration file must be a YAML mapping at the top level.")
-        actions = [SyncAction(**item).normalize() for item in raw.get("actions", [])]
+        raw_actions = raw.get("actions", [])
+        if not isinstance(raw_actions, list):
+            raise ValueError("Configuration field 'actions' must be a list.")
+
+        actions = []
+        for index, item in enumerate(raw_actions):
+            if not isinstance(item, dict):
+                raise ValueError(f"Configuration action at index {index} must be a mapping.")
+            actions.append(SyncAction(**item).normalize())
         self.config = SyncConfig(sync_tool=raw.get("sync_tool", "rsync"), actions=actions)
         return self.config
 
@@ -196,12 +204,8 @@ class ConfigManager:
             if docs.exists() and docs.is_dir():
                 default_src = docs
             else:
-                try:
-                    docs.mkdir(parents=True, exist_ok=True)
-                    default_src = docs
-                except OSError:
-                    fallback_src.mkdir(parents=True, exist_ok=True)
-                    default_src = fallback_src
+                fallback_src.mkdir(parents=True, exist_ok=True)
+                default_src = fallback_src
 
             dst_path = home / "dir-sync-backups"
             if not dst_path.exists():

@@ -466,7 +466,7 @@ class TestConfigManagerValidation:
         config_path = tmp_path / "config.yml"
         fake_home = tmp_path / "home"
         fake_home.mkdir()
-        docs_path = fake_home / "Documents"
+        fallback_src = fake_home / "dir-sync-source"
         import dirsync.config as config_module
 
         monkeypatch.setattr(config_module.Path, "home", lambda: fake_home)
@@ -478,7 +478,8 @@ class TestConfigManagerValidation:
         action = manager.config.actions[0]
         assert action.name == "documents-backup"
         assert "dir-sync-backups" in action.dst_path
-        assert action.src_path == str(docs_path)
+        assert action.src_path == str(fallback_src)
+        assert not (fake_home / "Documents").exists()
         is_valid, errors, _warnings = action.validate()
         assert is_valid, "Default action failed validation: {}".format(errors)
 
