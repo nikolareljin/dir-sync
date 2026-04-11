@@ -147,15 +147,17 @@ class PreflightValidator:
                     "Please provide a schedule (e.g., '0 2 * * *')."
                 )
             else:
+                schedule = str(action.schedule).strip()
+
                 # Use croniter to validate cron expressions for compatibility with runtime scheduler
                 try:
-                    croniter(action.schedule)
-                except (KeyError, ValueError) as e:
+                    croniter(schedule)
+                except (KeyError, TypeError, ValueError) as e:
                     self.errors.append(
                         "Invalid cron expression: '{}'. "
                         "Croniter error: {}. "
                         "Please use valid cron format (e.g., '0 2 * * *').".format(
-                            action.schedule, e
+                            schedule, e
                         )
                     )
 

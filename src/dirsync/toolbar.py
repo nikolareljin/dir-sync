@@ -209,7 +209,11 @@ class ToolbarController:
         root.destroy()
         if not source:
             return
-        self.manager.import_file(Path(source))
+        try:
+            self.manager.import_file(Path(source))
+        except ValueError as exc:
+            alert(str(exc))
+            return
         self.refresh()
         alert(f"Imported {source}")
 
