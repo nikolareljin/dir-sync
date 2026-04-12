@@ -61,6 +61,35 @@ class TestSyncActionNormalize:
         result = action.normalize()
         assert result is action
 
+    def test_validate_rejects_unsupported_method(self, tmp_path):
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
+        action = SyncAction(name="a", src_path=str(src), dst_path=str(dst), method="invalid")
+
+        is_valid, errors, _warnings = action.validate()
+
+        assert not is_valid
+        assert any("Unsupported method" in error for error in errors)
+
+    def test_validate_rejects_unsupported_action_type(self, tmp_path):
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
+        action = SyncAction(
+            name="a",
+            src_path=str(src),
+            dst_path=str(dst),
+            action_type="invalid",
+        )
+
+        is_valid, errors, _warnings = action.validate()
+
+        assert not is_valid
+        assert any("Unsupported action type" in error for error in errors)
+
 
 # --- SyncConfig ---
 
@@ -297,6 +326,64 @@ class TestConfigManager:
 
         with pytest.raises(ValueError, match=r"action at index 0 is invalid"):
             manager.import_file(source_path)
+
+    def test_add_action_logs_warning_once(self, tmp_path, caplog):
+        config_path = tmp_path / "config.yml"
+        manager = ConfigManager(path=config_path)
+        manager.config.actions = []
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
+        action = SyncAction(
+            name="warn-add",
+            src_path=str(src),
+            dst_path=str(dst),
+            method="one_way",
+        )
+
+        with caplog.at_level("WARNING"):
+            manager.add_action(action)
+
+        messages = [record.getMessage() for record in caplog.records]
+        assert messages == [
+            "Config warning: Action 'warn-add': One-way sync with no includes/excludes may "
+            "overwrite all destination contents. Consider adding include/exclude patterns for "
+            "safety."
+        ]
+
+    def test_update_action_logs_warning_once(self, tmp_path, caplog):
+        config_path = tmp_path / "config.yml"
+        manager = ConfigManager(path=config_path)
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
+        manager.add_action(
+            SyncAction(
+                name="warn-update",
+                src_path=str(src),
+                dst_path=str(dst),
+                method="two_way",
+            )
+        )
+
+        with caplog.at_level("WARNING"):
+            manager.update_action(
+                SyncAction(
+                    name="warn-update",
+                    src_path=str(src),
+                    dst_path=str(dst),
+                    method="one_way",
+                )
+            )
+
+        messages = [record.getMessage() for record in caplog.records]
+        assert messages == [
+            "Config warning: Action 'warn-update': One-way sync with no includes/excludes may "
+            "overwrite all destination contents. Consider adding include/exclude patterns for "
+            "safety."
+        ]
 
 
 def test_config_persists_device_binding_fields(tmp_path):
