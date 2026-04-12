@@ -23,7 +23,7 @@ class PreflightValidator:
     - destructive profile warnings
     """
 
-    # Paths that are dangerous to use as destinations for automatic sync.
+    # Paths that are dangerous to use as destinations and should trigger warnings.
     # Note: Excludes /home to avoid false positives for normal user destinations.
     # On Windows, dangerous system paths are handled via WINDOWS_DANGEROUS_DESTINATIONS.
     DANGEROUS_DESTINATIONS = (
@@ -135,7 +135,7 @@ class PreflightValidator:
         if self._is_dangerous_destination(dst_expanded):
             self.warnings.append(
                 "Destination '{}' is a system-critical path. "
-                "Automatic sync to this location is not recommended.".format(dst_expanded)
+                "Syncing to this location is not recommended.".format(dst_expanded)
             )
 
         # Check cron expression if scheduled

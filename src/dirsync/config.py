@@ -251,7 +251,8 @@ class ConfigManager:
                 method="one_way",
                 action_type="manual",
             )
-            self.add_action(sample, validate=not self.skip_validation)
+            self.config.add_action(sample)
+            self.save(validate=False)
 
     def validate(self) -> Tuple[bool, List[str], List[str]]:
         """Validate entire configuration using preflight validation.
