@@ -16,9 +16,9 @@ class TestPreflightValidatorBasicPaths:
             path.mkdir()
             action = SyncAction(name="test", src_path=str(path), dst_path=str(path))
             validator = PreflightValidator()
-            is_valid, errors, _warnings = validator.validate_action(action)
+            is_valid, _errors, _warnings = validator.validate_action(action)
             assert not is_valid
-            assert any("identical" in e.lower() for e in errors)
+            assert any("identical" in e.lower() for e in _errors)
 
     def test_destination_nested_in_source_fails(self):
         with TemporaryDirectory() as tmpdir:
@@ -252,7 +252,7 @@ class TestPreflightValidatorDestructiveSync:
                 excludes=[],
             )
             validator = PreflightValidator()
-            is_valid, errors, warnings = validator.validate_action(action)
+            is_valid, _errors, warnings = validator.validate_action(action)
             assert is_valid
             assert any("destructive" in w.lower() or "overwrite" in w.lower() for w in warnings)
 
@@ -271,7 +271,7 @@ class TestPreflightValidatorDestructiveSync:
                 excludes=[],
             )
             validator = PreflightValidator()
-            is_valid, errors, warnings = validator.validate_action(action)
+            is_valid, _errors, warnings = validator.validate_action(action)
             assert is_valid
             assert not any("destructive" in w.lower() or "overwrite" in w.lower() for w in warnings)
 

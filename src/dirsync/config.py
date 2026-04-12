@@ -50,18 +50,16 @@ class SyncAction:
         Returns:
             Tuple of (is_valid, errors, warnings)
         """
-        validator = PreflightValidator()
-        is_valid, errors, warnings = validator.validate_action(self)
-
         # Keep validate() aligned with normalize()-time constraints without
-        # mutating the current action instance.
+        # mutating the current action instance, then validate the normalized
+        # copy so warnings reflect the effective configuration.
         try:
-            deepcopy(self).normalize()
-        except ValueError as exc:
-            errors = [*errors, str(exc)]
-            is_valid = False
+            normalized = deepcopy(self).normalize()
+        except (ValueError, AttributeError, TypeError) as exc:
+            return False, [str(exc)], []
 
-        return is_valid, errors, warnings
+        validator = PreflightValidator()
+        return validator.validate_action(normalized)
 
 
 @dataclass
