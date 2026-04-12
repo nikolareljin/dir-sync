@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 
 class PreflightValidator:
-    """Validates sync actions before they can be saved or executed.
+    """Validates sync actions before they can be saved or imported.
 
     Blocks invalid or dangerous sync definitions covering:
     - source equals destination

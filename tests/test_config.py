@@ -195,6 +195,28 @@ class TestConfigManager:
         assert len(manager.config.actions) == 1
         assert manager.config.actions[0].name == "keep"
 
+    def test_ensure_default_rejects_file_at_fallback_source(self, tmp_path, monkeypatch):
+        config_path = tmp_path / "config.yml"
+        manager = ConfigManager(path=config_path)
+        manager.config.actions = []
+        monkeypatch.setattr("dirsync.config.Path.home", lambda: tmp_path)
+        (tmp_path / "dir-sync-source").write_text("not a directory", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="Default source path .* is not a directory"):
+            manager.ensure_default()
+
+    def test_ensure_default_rejects_file_at_backup_root(self, tmp_path, monkeypatch):
+        config_path = tmp_path / "config.yml"
+        manager = ConfigManager(path=config_path)
+        manager.config.actions = []
+        monkeypatch.setattr("dirsync.config.Path.home", lambda: tmp_path)
+        (tmp_path / "dir-sync-backups").write_text("not a directory", encoding="utf-8")
+
+        with pytest.raises(
+            ValueError, match="Default destination path .* is not a directory"
+        ):
+            manager.ensure_default()
+
     def test_load_empty_file(self, tmp_path):
         config_path = tmp_path / "config.yml"
         config_path.write_text("")

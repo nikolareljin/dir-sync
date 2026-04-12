@@ -216,11 +216,22 @@ class ConfigManager:
             if docs.exists() and docs.is_dir():
                 default_src = docs
             else:
-                fallback_src.mkdir(parents=True, exist_ok=True)
+                if fallback_src.exists():
+                    if not fallback_src.is_dir():
+                        raise ValueError(
+                            f"Default source path '{fallback_src}' exists but is not a directory."
+                        )
+                else:
+                    fallback_src.mkdir(parents=True, exist_ok=True)
                 default_src = fallback_src
 
             dst_path = home / "dir-sync-backups"
-            if not dst_path.exists():
+            if dst_path.exists():
+                if not dst_path.is_dir():
+                    raise ValueError(
+                        f"Default destination path '{dst_path}' exists but is not a directory."
+                    )
+            else:
                 dst_path.mkdir(parents=True, exist_ok=True)
 
             sample = SyncAction(
