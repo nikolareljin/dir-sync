@@ -218,6 +218,22 @@ class TestConfigManager:
         with pytest.raises(ValueError, match="YAML mapping"):
             manager.import_file(source_path)
 
+    def test_load_rejects_falsy_non_mapping_yaml(self, tmp_path):
+        config_path = tmp_path / "config.yml"
+        config_path.write_text("false\n", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="YAML mapping"):
+            ConfigManager(path=config_path)
+
+    def test_import_file_rejects_falsy_non_mapping_yaml(self, tmp_path):
+        config_path = tmp_path / "config.yml"
+        source_path = tmp_path / "invalid.yml"
+        source_path.write_text("false\n", encoding="utf-8")
+        manager = ConfigManager(path=config_path)
+
+        with pytest.raises(ValueError, match="YAML mapping"):
+            manager.import_file(source_path)
+
     def test_load_rejects_non_list_actions(self, tmp_path):
         config_path = tmp_path / "config.yml"
         config_path.write_text("actions: {}\n", encoding="utf-8")
@@ -231,6 +247,34 @@ class TestConfigManager:
 
         with pytest.raises(ValueError, match="action at index 0 must be a mapping"):
             ConfigManager(path=config_path)
+
+    def test_load_reports_invalid_action_index(self, tmp_path):
+        config_path = tmp_path / "config.yml"
+        config_path.write_text(
+            "actions:\n"
+            "  - name: broken\n"
+            "    src_path: null\n"
+            "    dst_path: /tmp/dst\n",
+            encoding="utf-8",
+        )
+
+        with pytest.raises(ValueError, match=r"action at index 0 is invalid"):
+            ConfigManager(path=config_path)
+
+    def test_import_file_reports_invalid_action_index(self, tmp_path):
+        config_path = tmp_path / "config.yml"
+        source_path = tmp_path / "invalid.yml"
+        source_path.write_text(
+            "actions:\n"
+            "  - name: broken\n"
+            "    src_path: null\n"
+            "    dst_path: /tmp/dst\n",
+            encoding="utf-8",
+        )
+        manager = ConfigManager(path=config_path)
+
+        with pytest.raises(ValueError, match=r"action at index 0 is invalid"):
+            manager.import_file(source_path)
 
 
 def test_config_persists_device_binding_fields(tmp_path):

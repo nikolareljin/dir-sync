@@ -95,7 +95,8 @@ class ConfigManager:
 
     def load(self) -> SyncConfig:
         with self.path.open("r", encoding="utf-8") as handle:
-            raw = yaml.safe_load(handle) or {}
+            raw = yaml.safe_load(handle)
+        raw = {} if raw is None else raw
         if not isinstance(raw, dict):
             raise ValueError("Configuration file must be a YAML mapping at the top level.")
         raw_actions = raw.get("actions", [])
@@ -106,7 +107,12 @@ class ConfigManager:
         for index, item in enumerate(raw_actions):
             if not isinstance(item, dict):
                 raise ValueError(f"Configuration action at index {index} must be a mapping.")
-            actions.append(SyncAction(**item).normalize())
+            try:
+                actions.append(SyncAction(**item).normalize())
+            except (AttributeError, TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"Configuration action at index {index} is invalid: {exc}"
+                ) from exc
         self.config = SyncConfig(sync_tool=raw.get("sync_tool", "rsync"), actions=actions)
         return self.config
 
@@ -162,7 +168,8 @@ class ConfigManager:
         partial state corruption on validation failure.
         """
         with source.open("r", encoding="utf-8") as handle:
-            payload = yaml.safe_load(handle) or {}  # Default to empty dict if file is empty
+            payload = yaml.safe_load(handle)
+        payload = {} if payload is None else payload
         if not isinstance(payload, dict):
             raise ValueError("Imported configuration must be a YAML mapping at the top level.")
         raw_actions = payload.get("actions", [])
@@ -175,7 +182,12 @@ class ConfigManager:
                 raise ValueError(
                     f"Imported configuration action at index {index} must be a mapping."
                 )
-            actions.append(SyncAction(**item).normalize())
+            try:
+                actions.append(SyncAction(**item).normalize())
+            except (AttributeError, TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"Imported configuration action at index {index} is invalid: {exc}"
+                ) from exc
 
         # Create temporary config for validation (don't mutate self.config yet)
         temp_config = SyncConfig(sync_tool=payload.get("sync_tool", "rsync"), actions=actions)
