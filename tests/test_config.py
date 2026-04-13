@@ -61,6 +61,35 @@ class TestSyncActionNormalize:
         result = action.normalize()
         assert result is action
 
+    def test_validate_rejects_unsupported_method(self, tmp_path):
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
+        action = SyncAction(name="a", src_path=str(src), dst_path=str(dst), method="invalid")
+
+        is_valid, errors, _warnings = action.validate()
+
+        assert not is_valid
+        assert any("Unsupported method" in error for error in errors)
+
+    def test_validate_rejects_unsupported_action_type(self, tmp_path):
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
+        action = SyncAction(
+            name="a",
+            src_path=str(src),
+            dst_path=str(dst),
+            action_type="invalid",
+        )
+
+        is_valid, errors, _warnings = action.validate()
+
+        assert not is_valid
+        assert any("Unsupported action type" in error for error in errors)
+
 
 # --- SyncConfig ---
 
@@ -113,10 +142,14 @@ class TestConfigManager:
         config_path = tmp_path / "config.yml"
         manager = ConfigManager(path=config_path)
         manager.config.actions = []
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
         sample = SyncAction(
             name="sample",
-            src_path=str(tmp_path / "src"),
-            dst_path=str(tmp_path / "dst"),
+            src_path=str(src),
+            dst_path=str(dst),
             method="one_way",
             action_type="manual",
         )
@@ -130,10 +163,14 @@ class TestConfigManager:
     def test_roundtrip_with_includes_excludes(self, tmp_path):
         config_path = tmp_path / "config.yml"
         manager = ConfigManager(path=config_path)
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
         action = SyncAction(
             name="filtered",
-            src_path="/src",
-            dst_path="/dst",
+            src_path=str(src),
+            dst_path=str(dst),
             includes=["*.py", "docs/*"],
             excludes=["*.pyc", "__pycache__/*"],
         )
@@ -149,8 +186,12 @@ class TestConfigManager:
         config_path = tmp_path / "config.yml"
         export_path = tmp_path / "exports" / "export.yml"
         manager = ConfigManager(path=config_path)
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
         manager.config.add_action(
-            SyncAction(name="exp", src_path="/a", dst_path="/b", method="one_way")
+            SyncAction(name="exp", src_path=str(src), dst_path=str(dst), method="one_way")
         )
         manager.save()
         manager.export(export_path)
@@ -172,7 +213,8 @@ class TestConfigManager:
         manager.config.actions = []
         manager.ensure_default()
         assert len(manager.config.actions) == 1
-        assert manager.config.actions[0].name == "home-backup"
+        assert manager.config.actions[0].name == "documents-backup"
+        assert "dir-sync-backups" in manager.config.actions[0].dst_path
 
     def test_ensure_default_noop_when_actions_exist(self, tmp_path):
         config_path = tmp_path / "config.yml"
@@ -182,6 +224,28 @@ class TestConfigManager:
         assert len(manager.config.actions) == 1
         assert manager.config.actions[0].name == "keep"
 
+    def test_ensure_default_rejects_file_at_fallback_source(self, tmp_path, monkeypatch):
+        config_path = tmp_path / "config.yml"
+        manager = ConfigManager(path=config_path)
+        manager.config.actions = []
+        monkeypatch.setattr("dirsync.config.Path.home", lambda: tmp_path)
+        (tmp_path / "dir-sync-source").write_text("not a directory", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="Default source path .* is not a directory"):
+            manager.ensure_default()
+
+    def test_ensure_default_rejects_file_at_backup_root(self, tmp_path, monkeypatch):
+        config_path = tmp_path / "config.yml"
+        manager = ConfigManager(path=config_path)
+        manager.config.actions = []
+        monkeypatch.setattr("dirsync.config.Path.home", lambda: tmp_path)
+        (tmp_path / "dir-sync-backups").write_text("not a directory", encoding="utf-8")
+
+        with pytest.raises(
+            ValueError, match="Default destination path .* is not a directory"
+        ):
+            manager.ensure_default()
+
     def test_load_empty_file(self, tmp_path):
         config_path = tmp_path / "config.yml"
         config_path.write_text("")
@@ -189,15 +253,151 @@ class TestConfigManager:
         assert manager.config.actions == []
         assert manager.config.sync_tool == "rsync"
 
+    def test_load_rejects_non_mapping_yaml(self, tmp_path):
+        config_path = tmp_path / "config.yml"
+        config_path.write_text("- not\n- a\n- mapping\n", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="YAML mapping"):
+            ConfigManager(path=config_path)
+
+    def test_import_file_rejects_non_mapping_yaml(self, tmp_path):
+        config_path = tmp_path / "config.yml"
+        source_path = tmp_path / "invalid.yml"
+        source_path.write_text("- not\n- a\n- mapping\n", encoding="utf-8")
+        manager = ConfigManager(path=config_path)
+
+        with pytest.raises(ValueError, match="YAML mapping"):
+            manager.import_file(source_path)
+
+    def test_load_rejects_falsy_non_mapping_yaml(self, tmp_path):
+        config_path = tmp_path / "config.yml"
+        config_path.write_text("false\n", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="YAML mapping"):
+            ConfigManager(path=config_path)
+
+    def test_import_file_rejects_falsy_non_mapping_yaml(self, tmp_path):
+        config_path = tmp_path / "config.yml"
+        source_path = tmp_path / "invalid.yml"
+        source_path.write_text("false\n", encoding="utf-8")
+        manager = ConfigManager(path=config_path)
+
+        with pytest.raises(ValueError, match="YAML mapping"):
+            manager.import_file(source_path)
+
+    def test_load_rejects_non_list_actions(self, tmp_path):
+        config_path = tmp_path / "config.yml"
+        config_path.write_text("actions: {}\n", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="field 'actions' must be a list"):
+            ConfigManager(path=config_path)
+
+    def test_load_rejects_non_mapping_action_items(self, tmp_path):
+        config_path = tmp_path / "config.yml"
+        config_path.write_text("actions:\n  - valid\n", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="action at index 0 must be a mapping"):
+            ConfigManager(path=config_path)
+
+    def test_load_reports_invalid_action_index(self, tmp_path):
+        config_path = tmp_path / "config.yml"
+        config_path.write_text(
+            "actions:\n"
+            "  - name: broken\n"
+            "    src_path: null\n"
+            "    dst_path: /tmp/dst\n",
+            encoding="utf-8",
+        )
+
+        with pytest.raises(ValueError, match=r"action at index 0 is invalid"):
+            ConfigManager(path=config_path)
+
+    def test_import_file_reports_invalid_action_index(self, tmp_path):
+        config_path = tmp_path / "config.yml"
+        source_path = tmp_path / "invalid.yml"
+        source_path.write_text(
+            "actions:\n"
+            "  - name: broken\n"
+            "    src_path: null\n"
+            "    dst_path: /tmp/dst\n",
+            encoding="utf-8",
+        )
+        manager = ConfigManager(path=config_path)
+
+        with pytest.raises(ValueError, match=r"action at index 0 is invalid"):
+            manager.import_file(source_path)
+
+    def test_add_action_logs_warning_once(self, tmp_path, caplog):
+        config_path = tmp_path / "config.yml"
+        manager = ConfigManager(path=config_path)
+        manager.config.actions = []
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
+        action = SyncAction(
+            name="warn-add",
+            src_path=str(src),
+            dst_path=str(dst),
+            method="one_way",
+        )
+
+        with caplog.at_level("WARNING"):
+            manager.add_action(action)
+
+        messages = [record.getMessage() for record in caplog.records]
+        assert messages == [
+            "Config warning: Action 'warn-add': One-way sync with no includes/excludes may "
+            "overwrite all destination contents. Consider adding include/exclude patterns for "
+            "safety."
+        ]
+
+    def test_update_action_logs_warning_once(self, tmp_path, caplog):
+        config_path = tmp_path / "config.yml"
+        manager = ConfigManager(path=config_path)
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
+        manager.add_action(
+            SyncAction(
+                name="warn-update",
+                src_path=str(src),
+                dst_path=str(dst),
+                method="two_way",
+            )
+        )
+
+        with caplog.at_level("WARNING"):
+            manager.update_action(
+                SyncAction(
+                    name="warn-update",
+                    src_path=str(src),
+                    dst_path=str(dst),
+                    method="one_way",
+                )
+            )
+
+        messages = [record.getMessage() for record in caplog.records]
+        assert messages == [
+            "Config warning: Action 'warn-update': One-way sync with no includes/excludes may "
+            "overwrite all destination contents. Consider adding include/exclude patterns for "
+            "safety."
+        ]
+
 
 def test_config_persists_device_binding_fields(tmp_path):
     config_path = tmp_path / "config.yml"
     manager = ConfigManager(path=config_path)
     manager.config.actions = []
+    src = tmp_path / "src"
+    dst = tmp_path / "dst"
+    src.mkdir()
+    dst.mkdir()
     sample = SyncAction(
         name="usb-sync",
-        src_path=str(tmp_path / "src"),
-        dst_path=str(tmp_path / "dst"),
+        src_path=str(src),
+        dst_path=str(dst),
         method="one_way",
         action_type="auto_on_destination",
         dst_device_id="8D06-A5B2",

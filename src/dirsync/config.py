@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+import logging
 import os
+from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import yaml
 
 from .constants import CONFIG_PATH, SUPPORTED_ACTION_TYPES, SUPPORTED_METHODS
+from .validator import ConfigValidator, PreflightValidator
+
+# Use module-level logger for consistent logging
+_logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -37,6 +43,23 @@ class SyncAction:
         self.includes = [p.strip() for p in self.includes if p.strip()]
         self.excludes = [p.strip() for p in self.excludes if p.strip()]
         return self
+
+    def validate(self) -> Tuple[bool, List[str], List[str]]:
+        """Validate this action using preflight validation.
+
+        Returns:
+            Tuple of (is_valid, errors, warnings)
+        """
+        # Keep validate() aligned with normalize()-time constraints without
+        # mutating the current action instance, then validate the normalized
+        # copy so warnings reflect the effective configuration.
+        try:
+            normalized = deepcopy(self).normalize()
+        except (ValueError, AttributeError, TypeError) as exc:
+            return False, [str(exc)], []
+
+        validator = PreflightValidator()
+        return validator.validate_action(normalized)
 
 
 @dataclass
@@ -68,10 +91,11 @@ class SyncConfig:
 
 
 class ConfigManager:
-    def __init__(self, path: Path = CONFIG_PATH):
+    def __init__(self, path: Path = CONFIG_PATH, skip_validation: bool = False):
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.config = SyncConfig()
+        self.skip_validation = skip_validation
         if self.path.exists():
             self.load()
         else:
@@ -79,12 +103,43 @@ class ConfigManager:
 
     def load(self) -> SyncConfig:
         with self.path.open("r", encoding="utf-8") as handle:
-            raw = yaml.safe_load(handle) or {}
-        actions = [SyncAction(**item).normalize() for item in raw.get("actions", [])]
+            raw = yaml.safe_load(handle)
+        raw = {} if raw is None else raw
+        if not isinstance(raw, dict):
+            raise ValueError("Configuration file must be a YAML mapping at the top level.")
+        raw_actions = raw.get("actions", [])
+        if not isinstance(raw_actions, list):
+            raise ValueError("Configuration field 'actions' must be a list.")
+
+        actions = []
+        for index, item in enumerate(raw_actions):
+            if not isinstance(item, dict):
+                raise ValueError(f"Configuration action at index {index} must be a mapping.")
+            try:
+                actions.append(SyncAction(**item).normalize())
+            except (AttributeError, TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"Configuration action at index {index} is invalid: {exc}"
+                ) from exc
         self.config = SyncConfig(sync_tool=raw.get("sync_tool", "rsync"), actions=actions)
         return self.config
 
-    def save(self) -> None:
+    def save(self, validate: bool = True) -> None:
+        """Save configuration with optional validation.
+
+        Args:
+            validate: If True, run preflight validation before saving.
+                     Raises ValueError if validation fails.
+        """
+        if validate and not self.skip_validation:
+            is_valid, errors, warnings = self.validate()
+            if not is_valid:
+                error_lines = "\n".join("  - {}".format(e) for e in errors)
+                raise ValueError("Configuration validation failed:\n" + error_lines)
+            # Log warnings but don't block save
+            for warning in warnings:
+                _logger.warning("Config warning: %s", warning)
+
         data = {
             "sync_tool": self.config.sync_tool,
             "actions": [asdict(a) for a in self.config.actions],
@@ -92,7 +147,16 @@ class ConfigManager:
         with self.path.open("w", encoding="utf-8") as handle:
             yaml.safe_dump(data, handle, sort_keys=False)
 
-    def export(self, target: Path) -> Path:
+    def export(self, target: Path, validate: bool = True) -> Path:
+        """Export configuration to a file with optional validation."""
+        if validate and not self.skip_validation:
+            is_valid, errors, warnings = self.validate()
+            if not is_valid:
+                error_lines = "\n".join("  - {}".format(e) for e in errors)
+                raise ValueError("Configuration validation failed:\n" + error_lines)
+            for warning in warnings:
+                _logger.warning("Config warning: %s", warning)
+
         target.parent.mkdir(parents=True, exist_ok=True)
         with target.open("w", encoding="utf-8") as handle:
             yaml.safe_dump(
@@ -105,25 +169,165 @@ class ConfigManager:
             )
         return target
 
-    def import_file(self, source: Path) -> SyncConfig:
+    def import_file(self, source: Path, validate: bool = True) -> SyncConfig:
+        """Import configuration from a file with optional validation.
+
+        Note: Validates imported config BEFORE mutating manager state to prevent
+        partial state corruption on validation failure.
+        """
         with source.open("r", encoding="utf-8") as handle:
             payload = yaml.safe_load(handle)
-        actions = [SyncAction(**item).normalize() for item in payload.get("actions", [])]
-        self.config = SyncConfig(sync_tool=payload.get("sync_tool", "rsync"), actions=actions)
-        self.save()
+        payload = {} if payload is None else payload
+        if not isinstance(payload, dict):
+            raise ValueError("Imported configuration must be a YAML mapping at the top level.")
+        raw_actions = payload.get("actions", [])
+        if not isinstance(raw_actions, list):
+            raise ValueError("Imported configuration field 'actions' must be a list.")
+
+        actions = []
+        for index, item in enumerate(raw_actions):
+            if not isinstance(item, dict):
+                raise ValueError(
+                    f"Imported configuration action at index {index} must be a mapping."
+                )
+            try:
+                actions.append(SyncAction(**item).normalize())
+            except (AttributeError, TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"Imported configuration action at index {index} is invalid: {exc}"
+                ) from exc
+
+        # Create temporary config for validation (don't mutate self.config yet)
+        temp_config = SyncConfig(sync_tool=payload.get("sync_tool", "rsync"), actions=actions)
+
+        if validate and not self.skip_validation:
+            # Validate the temp config before assigning
+            validator = ConfigValidator()
+            is_valid, errors, warnings = validator.validate_config(temp_config.actions)
+            if not is_valid:
+                error_lines = "\n".join("  - {}".format(e) for e in errors)
+                raise ValueError("Configuration validation failed:\n" + error_lines)
+            # Log warnings but don't block import
+            for warning in warnings:
+                _logger.warning("Config warning: %s", warning)
+
+        # Only mutate state after validation passes
+        self.config = temp_config
+        self.save(validate=False)  # Already validated
         return self.config
 
     def ensure_default(self) -> None:
         if not self.config.actions:
+            home = Path.home()
+            docs = home / "Documents"
+            fallback_src = home / "dir-sync-source"
+            if docs.exists() and docs.is_dir():
+                default_src = docs
+            else:
+                if fallback_src.exists():
+                    if not fallback_src.is_dir():
+                        raise ValueError(
+                            f"Default source path '{fallback_src}' exists but is not a directory."
+                        )
+                else:
+                    fallback_src.mkdir(parents=True, exist_ok=True)
+                default_src = fallback_src
+
+            dst_path = home / "dir-sync-backups"
+            if dst_path.exists():
+                if not dst_path.is_dir():
+                    raise ValueError(
+                        f"Default destination path '{dst_path}' exists but is not a directory."
+                    )
+            else:
+                dst_path.mkdir(parents=True, exist_ok=True)
+
             sample = SyncAction(
-                name="home-backup",
-                src_path=str(Path.home()),
-                dst_path=str(Path.home() / "dir-sync-backups"),
+                name="documents-backup",
+                src_path=str(default_src),
+                dst_path=str(dst_path / "documents"),
                 method="one_way",
                 action_type="manual",
             )
-            self.config.actions.append(sample)
-            self.save()
+            self.config.add_action(sample)
+            self.save(validate=False)
+
+    def validate(self) -> Tuple[bool, List[str], List[str]]:
+        """Validate entire configuration using preflight validation.
+
+        Returns:
+            Tuple of (is_valid, errors, warnings)
+        """
+        validator = ConfigValidator()
+        return validator.validate_config(self.config.actions)
+
+    def _validate_actions(self, actions: List[SyncAction]) -> Tuple[bool, List[str], List[str]]:
+        """Validate a prospective action list without mutating manager state."""
+        validator = ConfigValidator()
+        return validator.validate_config(actions)
+
+    def add_action(self, action: SyncAction, validate: bool = True) -> None:
+        """Add an action with optional validation."""
+        save_validate = validate
+        if validate and not self.skip_validation:
+            is_valid, errors, warnings = action.validate()
+            if not is_valid:
+                raise ValueError(
+                    "Action validation failed:\n" + "\n".join("  - {}".format(e) for e in errors)
+                )
+
+            candidate_config = deepcopy(self.config)
+            candidate_config.add_action(deepcopy(action))
+            is_valid, errors, warnings = self._validate_actions(candidate_config.actions)
+            if not is_valid:
+                error_lines = "\n".join("  - {}".format(e) for e in errors)
+                raise ValueError("Configuration validation failed:\n" + error_lines)
+            for warning in warnings:
+                _logger.warning("Config warning: %s", warning)
+            save_validate = False
+
+        self.config.add_action(action)
+        self.save(validate=save_validate)
+
+    def update_action(self, action: SyncAction, validate: bool = True) -> None:
+        """Update an action with optional validation."""
+        save_validate = validate
+        if validate and not self.skip_validation:
+            is_valid, errors, warnings = action.validate()
+            if not is_valid:
+                raise ValueError(
+                    "Action validation failed:\n" + "\n".join("  - {}".format(e) for e in errors)
+                )
+
+            candidate_config = deepcopy(self.config)
+            candidate_config.update_action(deepcopy(action))
+            is_valid, errors, warnings = self._validate_actions(candidate_config.actions)
+            if not is_valid:
+                error_lines = "\n".join("  - {}".format(e) for e in errors)
+                raise ValueError("Configuration validation failed:\n" + error_lines)
+            for warning in warnings:
+                _logger.warning("Config warning: %s", warning)
+            save_validate = False
+
+        self.config.update_action(action)
+        self.save(validate=save_validate)
+
+    def remove_action(self, name: str, validate: bool = True) -> None:
+        """Remove an action with optional validation of the resulting config."""
+        save_validate = validate
+        if validate and not self.skip_validation:
+            candidate_config = deepcopy(self.config)
+            candidate_config.remove_action(name)
+            is_valid, errors, warnings = self._validate_actions(candidate_config.actions)
+            if not is_valid:
+                error_lines = "\n".join("  - {}".format(e) for e in errors)
+                raise ValueError("Configuration validation failed:\n" + error_lines)
+            for warning in warnings:
+                _logger.warning("Config warning: %s", warning)
+            save_validate = False
+
+        self.config.remove_action(name)
+        self.save(validate=save_validate)
 
 
 __all__ = [
