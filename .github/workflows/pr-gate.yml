@@ -1,0 +1,15 @@
+name: PR Gate
+
+on:
+  pull_request:
+
+concurrency:
+  group: pr-gate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pr-gate:
+    uses: nikolareljin/ci-helpers/.github/workflows/pr-gate.yml@production
+    with:
+      python_version: "3.11"
+      working_directory: "."
