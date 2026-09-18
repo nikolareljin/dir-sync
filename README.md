@@ -32,16 +32,30 @@ pip install -e .[dev]
 
 ### Run the App
 ```bash
-python -m dirsync.app
+./start
 ```
 The tray icon appears so you can configure sync pairs or trigger existing jobs.
 
 ### Build a Standalone Binary
 Use the helper script (which installs PyInstaller if necessary) to mirror the packaging steps from `docs/BUILD.md`:
 ```bash
-./scripts/build.sh
+./build
 ```
 Artifacts are written to `dist/`.
+
+### Common Commands
+
+Run these commands from the repository root. Each delegates to the existing implementation in `scripts/` and forwards any arguments.
+
+| Command | Purpose |
+| --- | --- |
+| `./start` | Run the application, building it first when necessary. |
+| `./build` | Build the standalone application in `dist/`. |
+| `./test` | Run the unit test suite. |
+| `./lint` | Run Ruff and Black checks. |
+| `./check` | Run linting followed by tests. |
+| `./install` / `./uninstall` | Install or remove the local launcher. |
+| `./update` | Update the `script-helpers` submodule. |
 
 For additional background or optional packaging targets, see `docs/BUILD.md`. Testing guidance lives in `docs/TESTING.md`.
 

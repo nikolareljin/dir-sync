@@ -104,6 +104,9 @@ fi
 "$PYTHON_BIN" -m PyInstaller \
   --clean \
   --noconfirm \
+  --workpath "$PROJECT_ROOT/.build" \
+  --specpath "$PROJECT_ROOT/.build" \
+  --distpath "$PROJECT_ROOT/dist" \
   --name dir-sync \
   --windowed \
   --onefile \
