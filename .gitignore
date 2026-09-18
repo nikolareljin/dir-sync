@@ -5,6 +5,7 @@ build/
 dist/
 *.spec
 .venv/
+.venv-build-system/
 .env
 .pytest_cache/
 .mypy_cache/

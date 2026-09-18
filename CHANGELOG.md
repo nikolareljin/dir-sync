@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.0] - 2026-09-18
+- Add preflight validation for source and destination paths, schedules, dangerous destinations, destructive configurations, and duplicate action names.
+- Validate configuration changes before saving, importing, exporting, or executing actions.
+- Use a safe default backup source instead of the entire home directory.
+
 ## [0.1.0] - 2024-05-xx
 - Scaffold cross-platform Dir Sync app with toolbar, config UI, and notification surfaces.
 - Implement YAML-backed sync actions, scheduler, and drive detection hooks.
