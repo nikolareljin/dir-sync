@@ -241,9 +241,7 @@ class TestConfigManager:
         monkeypatch.setattr("dirsync.config.Path.home", lambda: tmp_path)
         (tmp_path / "dir-sync-backups").write_text("not a directory", encoding="utf-8")
 
-        with pytest.raises(
-            ValueError, match="Default destination path .* is not a directory"
-        ):
+        with pytest.raises(ValueError, match="Default destination path .* is not a directory"):
             manager.ensure_default()
 
     def test_load_empty_file(self, tmp_path):
@@ -302,10 +300,7 @@ class TestConfigManager:
     def test_load_reports_invalid_action_index(self, tmp_path):
         config_path = tmp_path / "config.yml"
         config_path.write_text(
-            "actions:\n"
-            "  - name: broken\n"
-            "    src_path: null\n"
-            "    dst_path: /tmp/dst\n",
+            "actions:\n" "  - name: broken\n" "    src_path: null\n" "    dst_path: /tmp/dst\n",
             encoding="utf-8",
         )
 
@@ -316,10 +311,7 @@ class TestConfigManager:
         config_path = tmp_path / "config.yml"
         source_path = tmp_path / "invalid.yml"
         source_path.write_text(
-            "actions:\n"
-            "  - name: broken\n"
-            "    src_path: null\n"
-            "    dst_path: /tmp/dst\n",
+            "actions:\n" "  - name: broken\n" "    src_path: null\n" "    dst_path: /tmp/dst\n",
             encoding="utf-8",
         )
         manager = ConfigManager(path=config_path)
