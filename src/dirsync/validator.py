@@ -156,9 +156,7 @@ class PreflightValidator:
                     self.errors.append(
                         "Invalid cron expression: '{}'. "
                         "Croniter error: {}. "
-                        "Please use valid cron format (e.g., '0 2 * * *').".format(
-                            schedule, e
-                        )
+                        "Please use valid cron format (e.g., '0 2 * * *').".format(schedule, e)
                     )
 
         # Check for destructive profile

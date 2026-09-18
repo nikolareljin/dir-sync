@@ -1,5 +1,6 @@
-dir-sync (0.1.0-1) jammy; urgency=medium
+dir-sync (0.2.0-1) jammy; urgency=medium
 
-  * Automated release.
+  * Add preflight validation for unsafe, invalid, and conflicting sync actions.
+  * Validate configuration changes before they are saved, imported, or executed.
 
- -- Dir Sync Contributors <opensource@users.noreply.github.com>  Fri, 06 Feb 2026 01:03:37 -0500
+ -- Dir Sync Contributors <opensource@users.noreply.github.com>  Fri, 18 Sep 2026 12:00:00 -0400
