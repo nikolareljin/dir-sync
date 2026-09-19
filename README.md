@@ -1,6 +1,6 @@
 # Dir Sync
 
-Dir Sync is a cross-platform desktop companion that keeps directories mirrored through rsync-style actions. It lives in the system tray, lets you define reusable sync actions, watches for removable or network destinations, and surfaces notifications when jobs finish or devices appear.
+Dir Sync is a cross-platform desktop companion for safe directory backups. It lives in the system tray, lets you define reusable sync actions, watches for removable or network destinations, and surfaces notifications when jobs finish or devices appear.
 
 Think of it as an automated backup / rsync of your important directories.
 
@@ -13,7 +13,8 @@ Setting up directories:
 
 - System-tray controller with quick actions (run, add, modify, import/export configuration).
 - Configurable source/destination pairs supporting local paths, network drives, and USB devices.
-- Multiple sync strategies: full two-way reconciliation or one-way source-to-destination mirroring.
+- Safe `backup` actions copy source changes while preserving destination-only files.
+- Expert `mirror` actions delete destination-only files to match the source.
 - Automation modes: on app start, when the destination device appears, or on cron-style schedules.
 - Destination device matching by ID for removable media workflows (USB/HDD reconnect automation).
 - Source-change awareness in tray menu labels plus a one-click "Run all changed dirs" action.
@@ -58,6 +59,10 @@ Run these commands from the repository root. Each delegates to the existing impl
 | `./update` | Update the `script-helpers` submodule. |
 
 For additional background or optional packaging targets, see `docs/BUILD.md`. Testing guidance lives in `docs/TESTING.md`.
+
+## Sync profiles
+
+New actions use `backup`: `delete_policy: keep_destination` and `conflict_policy: source_wins`. `mirror` is an expert-only profile with `delete_policy: delete_destination_extras`; the editor requires confirmation before enabling it. Two-way synchronization is unavailable until conflicts can be reconciled safely.
 
 ## License
 

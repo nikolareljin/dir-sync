@@ -7,7 +7,9 @@ APP_NAME = "Dir Sync"
 CONFIG_DIR = Path.home() / ".config" / "dir-sync"
 CONFIG_PATH = Path(CONFIG_DIR) / "config.yml"
 EXPORT_DIR = Path.home() / "dir-sync-exports"
-SUPPORTED_METHODS = ("two_way", "one_way")
+SUPPORTED_PROFILES = ("backup", "mirror")
+DELETE_POLICIES = ("keep_destination", "delete_destination_extras")
+CONFLICT_POLICIES = ("source_wins",)
 SUPPORTED_ACTION_TYPES = (
     "manual",
     "auto_on_start",

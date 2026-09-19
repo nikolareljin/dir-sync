@@ -27,7 +27,7 @@ def _make_action(tmp_path, **overrides):
         name="test",
         src_path=str(tmp_path / "src"),
         dst_path=str(tmp_path / "dst"),
-        method="one_way",
+        profile="backup",
         action_type="manual",
     )
     defaults.update(overrides)
@@ -143,11 +143,11 @@ class TestPythonCopyFallback:
         assert any("not available" in msg for _, msg in notifier.messages)
 
 
-# --- Two-way sync ---
+# --- One-direction profile behavior ---
 
 
-class TestTwoWaySync:
-    def test_two_way_copies_both_directions(self, tmp_path, monkeypatch):
+class TestBackupProfile:
+    def test_backup_does_not_copy_destination_files_to_source(self, tmp_path, monkeypatch):
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -160,11 +160,11 @@ class TestTwoWaySync:
         monkeypatch.setattr(executor, "rsync_path", None)
         monkeypatch.setattr(executor, "robocopy_path", None)
 
-        action = _make_action(tmp_path, method="two_way")
+        action = _make_action(tmp_path, profile="backup")
         executor.run_action(action)
 
         assert (dst / "from_src.txt").read_text() == "src_content"
-        assert (src / "from_dst.txt").read_text() == "dst_content"
+        assert not (src / "from_dst.txt").exists()
 
 
 # --- Rsync command building ---
@@ -364,7 +364,7 @@ def test_pending_changes_fallback(tmp_path, monkeypatch):
         name="pending",
         src_path=str(src),
         dst_path=str(dst),
-        method="one_way",
+        profile="backup",
         action_type="manual",
     )
 
@@ -394,14 +394,14 @@ def test_pending_actions_filters_changed_items(tmp_path, monkeypatch):
         name="changed",
         src_path=str(src_a),
         dst_path=str(dst_a),
-        method="one_way",
+        profile="backup",
         action_type="manual",
     )
     unchanged_action = SyncAction(
         name="unchanged",
         src_path=str(src_b),
         dst_path=str(dst_b),
-        method="one_way",
+        profile="backup",
         action_type="manual",
     )
 
