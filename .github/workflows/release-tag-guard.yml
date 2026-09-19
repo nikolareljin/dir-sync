@@ -5,6 +5,11 @@ on:
   push:
     branches: [main, master, "release/*"]
 
+permissions:
+  contents: write
+  pull-requests: read
+  actions: write
+
 jobs:
   release_guard:
     runs-on: ubuntu-latest
@@ -20,3 +25,10 @@ jobs:
         with:
           release_branch: ${{ github.head_ref || github.ref_name }}
           fetch_tags: true
+
+  auto_tag_release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: nikolareljin/ci-helpers/.github/workflows/auto-tag-release.yml@production
+    with:
+      update_production_tag: false
+      release_workflow: release.yml

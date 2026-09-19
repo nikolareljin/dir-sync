@@ -128,6 +128,24 @@ class TestPreflightValidatorCron:
             assert is_valid
             assert errors == []
 
+    def test_guided_rule_rejects_boolean_numbers(self):
+        with TemporaryDirectory() as tmpdir:
+            src = Path(tmpdir) / "src"
+            dst = Path(tmpdir) / "dst"
+            src.mkdir()
+            dst.mkdir()
+            action = SyncAction(
+                name="test",
+                src_path=str(src),
+                dst_path=str(dst),
+                action_type="scheduled",
+                schedule_rule={"kind": "minutes", "interval_minutes": True},
+            )
+            validator = PreflightValidator()
+            is_valid, errors, _warnings = validator.validate_action(action)
+            assert not is_valid
+            assert any("between 1 and 59" in error for error in errors)
+
     def test_invalid_cron_fails(self):
         with TemporaryDirectory() as tmpdir:
             src = Path(tmpdir) / "src"
