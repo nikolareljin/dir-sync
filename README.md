@@ -58,6 +58,8 @@ Run these commands from the repository root. Each delegates to the existing impl
 | `./install` / `./uninstall` | Install or remove the local launcher. |
 | `./update` | Update the `script-helpers` submodule. |
 
+`Preview only (dry run)` is enabled by default in the tray menu. Leave it checked to inspect changes without copying files, or uncheck it before selecting an action to run it for real.
+
 For additional background or optional packaging targets, see `docs/BUILD.md`. Testing guidance lives in `docs/TESTING.md`.
 
 ## Sync profiles

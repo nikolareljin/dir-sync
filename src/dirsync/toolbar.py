@@ -78,6 +78,11 @@ class ToolbarController:
 
         menu = pystray.Menu(
             pystray.MenuItem("Run configured", run_menu),
+            pystray.MenuItem(
+                "Preview only (dry run)",
+                self._toggle_soft_run,
+                checked=self._is_soft_run_checked,
+            ),
             pystray.MenuItem("Run all changed dirs", lambda icon, item: self._run_all_changed()),
             pystray.MenuItem("Add new action", lambda icon, item: self._open_creator()),
             pystray.MenuItem("Modify action", edit_menu),
@@ -174,7 +179,7 @@ class ToolbarController:
             self.notifier.success("No source changes detected")
             return
         for action in changed:
-            self._run_source_action(action, soft_run=False)
+            self._run_source_action(action, soft_run=self.soft_run_enabled)
 
     def _action_label(self, action: SyncAction) -> str:
         has_changes = self.executor.has_pending_source_changes(action)
