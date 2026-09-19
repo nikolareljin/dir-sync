@@ -173,7 +173,7 @@ class PreflightValidator:
             return
         if kind == "minutes":
             interval = rule.get("interval_minutes")
-            if not isinstance(interval, int) or not 1 <= interval <= 59:
+            if type(interval) is not int or not 1 <= interval <= 59:
                 self.errors.append("Minute recurrence must be between 1 and 59 minutes.")
             return
         time_value = rule.get("time")
@@ -186,12 +186,12 @@ class PreflightValidator:
             if (
                 not isinstance(weekdays, list)
                 or not weekdays
-                or any(not isinstance(day, int) or day not in range(7) for day in weekdays)
+                or any(type(day) is not int or day not in range(7) for day in weekdays)
             ):
                 self.errors.append("Weekly recurrence requires one or more weekdays.")
         if kind == "monthly":
             day = rule.get("day_of_month")
-            if not isinstance(day, int) or not 1 <= day <= 31:
+            if type(day) is not int or not 1 <= day <= 31:
                 self.errors.append("Monthly recurrence requires a day between 1 and 31.")
 
     def _is_subpath(self, path: Path, parent: Path) -> bool:

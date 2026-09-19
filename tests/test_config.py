@@ -39,6 +39,19 @@ class TestSyncActionNormalize:
         action.normalize()
         assert action.schedule == "0 2 * * *"
 
+    def test_rejects_ambiguous_scheduled_rule_and_cron(self):
+        action = SyncAction(
+            name="a",
+            src_path="/a",
+            dst_path="/b",
+            action_type="scheduled",
+            schedule="0 2 * * *",
+            schedule_rule={"kind": "daily", "time": "02:00"},
+        )
+
+        with pytest.raises(ValueError, match="either a guided rule or a cron expression"):
+            action.normalize()
+
     def test_strips_include_exclude_patterns(self):
         action = SyncAction(
             name="a",
@@ -471,3 +484,11 @@ def test_picker_prefers_selected_then_remembered_then_home(tmp_path, monkeypatch
     manager.last_browse_directory = None
     monkeypatch.setattr("dirsync.ui_config.Path.home", lambda: tmp_path)
     assert window._picker_initial_directory("") == tmp_path
+
+
+def test_picker_ignores_relative_paths(tmp_path, monkeypatch):
+    manager = ConfigManager(path=tmp_path / "config.yml")
+    window = ConfigWindow(manager)
+    monkeypatch.setattr("dirsync.ui_config.Path.home", lambda: tmp_path)
+
+    assert window._picker_initial_directory("relative-path") == tmp_path

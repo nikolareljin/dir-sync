@@ -460,7 +460,7 @@ class ConfigWindow:
     def _picker_initial_directory(self, value: str) -> Path:
         """Pick a useful filesystem location without falling back to the process cwd."""
         candidate = Path(value).expanduser() if value.strip() else None
-        if candidate:
+        if candidate and candidate.is_absolute():
             if candidate.is_dir():
                 return candidate
             if candidate.parent.is_dir():
@@ -468,7 +468,7 @@ class ConfigWindow:
         remembered = self.manager.last_browse_directory
         if remembered:
             remembered_path = Path(remembered).expanduser()
-            if remembered_path.is_dir():
+            if remembered_path.is_absolute() and remembered_path.is_dir():
                 return remembered_path
         return Path.home()
 

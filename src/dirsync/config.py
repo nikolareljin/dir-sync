@@ -63,6 +63,10 @@ class SyncAction:
             self.schedule_rule = None
         elif self.schedule_rule is not None and not isinstance(self.schedule_rule, dict):
             raise ValueError("Schedule rule must be a mapping.")
+        elif self.schedule is not None and self.schedule_rule is not None:
+            raise ValueError(
+                "Scheduled actions must use either a guided rule or a cron expression."
+            )
         self.includes = [p.strip() for p in self.includes if p.strip()]
         self.excludes = [p.strip() for p in self.excludes if p.strip()]
         return self
