@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -138,25 +139,21 @@ class PreflightValidator:
                 "Syncing to this location is not recommended.".format(dst_expanded)
             )
 
-        # Check cron expression if scheduled
+        # A scheduled action is either a guided rule or an advanced raw cron expression.
         if action.action_type == "scheduled":
-            # If action_type is scheduled, schedule must be provided and valid
-            if not action.schedule or not str(action.schedule).strip():
+            if action.schedule_rule is not None:
+                self._validate_schedule_rule(action.schedule_rule)
+            elif not action.schedule or not str(action.schedule).strip():
                 self.errors.append(
-                    "Scheduled action requires a valid cron expression. "
-                    "Please provide a schedule (e.g., '0 2 * * *')."
+                    "Scheduled action requires a recurrence or a valid cron expression."
                 )
             else:
                 schedule = str(action.schedule).strip()
-
-                # Use croniter to validate cron expressions for compatibility with runtime scheduler
                 try:
                     croniter(schedule)
-                except (KeyError, TypeError, ValueError) as e:
+                except (KeyError, TypeError, ValueError) as exc:
                     self.errors.append(
-                        "Invalid cron expression: '{}'. "
-                        "Croniter error: {}. "
-                        "Please use valid cron format (e.g., '0 2 * * *').".format(schedule, e)
+                        "Invalid cron expression: '{}'. Croniter error: {}.".format(schedule, exc)
                     )
 
         # Mirror intentionally deletes destination-only files and needs a clear warning.
@@ -168,6 +165,34 @@ class PreflightValidator:
 
         is_valid = len(self.errors) == 0
         return is_valid, self.errors, self.warnings
+
+    def _validate_schedule_rule(self, rule: dict) -> None:
+        kind = rule.get("kind")
+        if kind not in {"minutes", "daily", "weekly", "monthly"}:
+            self.errors.append("Schedule recurrence must be minutes, daily, weekly, or monthly.")
+            return
+        if kind == "minutes":
+            interval = rule.get("interval_minutes")
+            if not isinstance(interval, int) or not 1 <= interval <= 59:
+                self.errors.append("Minute recurrence must be between 1 and 59 minutes.")
+            return
+        time_value = rule.get("time")
+        if not isinstance(time_value, str) or not re.fullmatch(
+            r"(?:[01]\d|2[0-3]):[0-5]\d", time_value
+        ):
+            self.errors.append("Scheduled time must use 24-hour HH:MM format.")
+        if kind == "weekly":
+            weekdays = rule.get("weekdays")
+            if (
+                not isinstance(weekdays, list)
+                or not weekdays
+                or any(not isinstance(day, int) or day not in range(7) for day in weekdays)
+            ):
+                self.errors.append("Weekly recurrence requires one or more weekdays.")
+        if kind == "monthly":
+            day = rule.get("day_of_month")
+            if not isinstance(day, int) or not 1 <= day <= 31:
+                self.errors.append("Monthly recurrence requires a day between 1 and 31.")
 
     def _is_subpath(self, path: Path, parent: Path) -> bool:
         """Check if path is a subpath of parent."""

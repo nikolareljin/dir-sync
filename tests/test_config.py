@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from dirsync.config import ConfigManager, SyncAction, SyncConfig
+from dirsync.ui_config import ConfigWindow
 
 # --- SyncAction ---
 
@@ -414,3 +415,59 @@ def test_config_persists_device_binding_fields(tmp_path):
     assert action
     assert action.dst_device_id == "8D06-A5B2"
     assert action.dst_path_on_device == "backup/photos"
+
+
+def test_guided_schedule_rule_roundtrips(tmp_path):
+    config_path = tmp_path / "config.yml"
+    src = tmp_path / "src"
+    dst = tmp_path / "dst"
+    src.mkdir()
+    dst.mkdir()
+    manager = ConfigManager(path=config_path)
+    manager.config.actions = []
+    manager.add_action(
+        SyncAction(
+            name="weekly",
+            src_path=str(src),
+            dst_path=str(dst),
+            action_type="scheduled",
+            schedule_rule={"kind": "weekly", "time": "13:02", "weekdays": [0, 6]},
+        )
+    )
+
+    loaded = ConfigManager(path=config_path)
+    action = loaded.config.find_action("weekly")
+    assert action.schedule is None
+    assert action.schedule_rule == {"kind": "weekly", "time": "13:02", "weekdays": [0, 6]}
+
+
+def test_last_browse_directory_is_local_and_not_exported(tmp_path):
+    config_path = tmp_path / "config.yml"
+    manager = ConfigManager(path=config_path)
+    directory = tmp_path / "remembered"
+    directory.mkdir()
+    manager.remember_browse_directory(str(directory))
+
+    loaded = ConfigManager(path=config_path)
+    assert loaded.last_browse_directory == str(directory)
+
+    export_path = tmp_path / "export.yml"
+    loaded.export(export_path, validate=False)
+    assert "ui_state" not in export_path.read_text(encoding="utf-8")
+
+
+def test_picker_prefers_selected_then_remembered_then_home(tmp_path, monkeypatch):
+    manager = ConfigManager(path=tmp_path / "config.yml")
+    window = ConfigWindow(manager)
+    selected = tmp_path / "selected"
+    remembered = tmp_path / "remembered"
+    selected.mkdir()
+    remembered.mkdir()
+    manager.last_browse_directory = str(remembered)
+
+    assert window._picker_initial_directory(str(selected)) == selected
+    assert window._picker_initial_directory("") == remembered
+
+    manager.last_browse_directory = None
+    monkeypatch.setattr("dirsync.ui_config.Path.home", lambda: tmp_path)
+    assert window._picker_initial_directory("") == tmp_path

@@ -31,6 +31,14 @@ class TestSchedulerConfigure:
         assert "cron-job" in scheduler._scheduled
         assert "manual-job" not in scheduler._scheduled
 
+    def test_registers_guided_schedule_rules(self):
+        runner = MagicMock()
+        scheduler = ActionScheduler(runner)
+        action = _make_action("guided", action_type="scheduled")
+        action.schedule_rule = {"kind": "daily", "time": "13:02"}
+        scheduler.configure([action])
+        assert "guided" in scheduler._scheduled
+
     def test_auto_on_start_triggers_immediately(self):
         called = threading.Event()
 
@@ -119,3 +127,31 @@ class TestSchedulerLoop:
         scheduler.start()
         assert called.wait(timeout=5)
         scheduler.stop()
+
+
+class TestGuidedScheduleRules:
+    def test_next_minute_interval_uses_clock_boundaries(self):
+        result = ActionScheduler._next_rule_time(
+            {"kind": "minutes", "interval_minutes": 15}, datetime(2026, 9, 19, 10, 7, 33)
+        )
+        assert result == datetime(2026, 9, 19, 10, 15)
+
+    def test_daily_rule_uses_local_time(self):
+        result = ActionScheduler._next_rule_time(
+            {"kind": "daily", "time": "13:02"}, datetime(2026, 9, 19, 13, 2)
+        )
+        assert result == datetime(2026, 9, 20, 13, 2)
+
+    def test_weekly_rule_supports_multiple_days(self):
+        result = ActionScheduler._next_rule_time(
+            {"kind": "weekly", "time": "01:01", "weekdays": [6]},
+            datetime(2026, 9, 19, 12, 0),
+        )
+        assert result == datetime(2026, 9, 20, 1, 1)
+
+    def test_monthly_rule_uses_last_day_when_needed(self):
+        result = ActionScheduler._next_rule_time(
+            {"kind": "monthly", "time": "00:03", "day_of_month": 31},
+            datetime(2026, 4, 1, 0, 0),
+        )
+        assert result == datetime(2026, 4, 30, 0, 3)

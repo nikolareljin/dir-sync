@@ -5,7 +5,7 @@ import os
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 import yaml
 
@@ -31,7 +31,8 @@ class SyncAction:
     delete_policy: str = "keep_destination"
     conflict_policy: str = "source_wins"
     action_type: str = "manual"
-    schedule: Optional[str] = None  # cron format when action_type == scheduled
+    schedule: Optional[str] = None  # Advanced raw cron expression
+    schedule_rule: Optional[dict[str, Any]] = None  # Guided local-time recurrence
     includes: List[str] = field(default_factory=list)  # glob patterns to include
     excludes: List[str] = field(default_factory=list)  # glob patterns to exclude
     dst_device_id: Optional[str] = None
@@ -59,6 +60,9 @@ class SyncAction:
             raise ValueError(f"Unsupported action type: {self.action_type}")
         if self.action_type != "scheduled":
             self.schedule = None
+            self.schedule_rule = None
+        elif self.schedule_rule is not None and not isinstance(self.schedule_rule, dict):
+            raise ValueError("Schedule rule must be a mapping.")
         self.includes = [p.strip() for p in self.includes if p.strip()]
         self.excludes = [p.strip() for p in self.excludes if p.strip()]
         return self
@@ -114,6 +118,7 @@ class ConfigManager:
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.config = SyncConfig()
+        self.last_browse_directory: Optional[str] = None
         self.skip_validation = skip_validation
         if self.path.exists():
             self.load()
@@ -141,6 +146,14 @@ class ConfigManager:
                     f"Configuration action at index {index} is invalid: {exc}"
                 ) from exc
         self.config = SyncConfig(sync_tool=raw.get("sync_tool", "rsync"), actions=actions)
+        ui_state = raw.get("ui_state", {})
+        if isinstance(ui_state, dict):
+            last_directory = ui_state.get("last_browse_directory")
+            self.last_browse_directory = (
+                str(last_directory).strip()
+                if isinstance(last_directory, str) and last_directory.strip()
+                else None
+            )
         return self.config
 
     @staticmethod
@@ -180,6 +193,7 @@ class ConfigManager:
         data = {
             "sync_tool": self.config.sync_tool,
             "actions": [asdict(a) for a in self.config.actions],
+            "ui_state": {"last_browse_directory": self.last_browse_directory},
         }
         with self.path.open("w", encoding="utf-8") as handle:
             yaml.safe_dump(data, handle, sort_keys=False)
@@ -252,6 +266,13 @@ class ConfigManager:
         self.config = temp_config
         self.save(validate=False)  # Already validated
         return self.config
+
+    def remember_browse_directory(self, directory: str) -> None:
+        """Persist the last filesystem location used by either directory picker."""
+        value = str(directory).strip()
+        if value and value != self.last_browse_directory:
+            self.last_browse_directory = value
+            self.save(validate=False)
 
     def ensure_default(self) -> None:
         if not self.config.actions:

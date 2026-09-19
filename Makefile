@@ -16,7 +16,7 @@ PPA_SERIES ?= jammy
 BREW_HOMEPAGE ?= https://github.com/$(REPO_SLUG)
 BREW_TAP_REPO ?=
 BREW_TAP_BRANCH ?= main
-BREW_TARBALL_URL ?= https://github.com/$(REPO_SLUG)/releases/download/v$(VERSION)/$(APP_NAME)-$(VERSION).tar.gz
+BREW_TARBALL_URL ?= https://github.com/$(REPO_SLUG)/releases/download/$(VERSION)/$(APP_NAME)-$(VERSION).tar.gz
 
 .DEFAULT_GOAL := help
 

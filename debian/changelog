@@ -1,6 +1,6 @@
-dir-sync (0.2.0-1) jammy; urgency=medium
+dir-sync (1.1.0-1) jammy; urgency=medium
 
-  * Add preflight validation for unsafe, invalid, and conflicting sync actions.
-  * Validate configuration changes before they are saved, imported, or executed.
+  * Add guided scheduling, remembered folder browsing, and plain-semver release automation.
+  * Keep advanced cron support for existing configurations.
 
  -- Dir Sync Contributors <opensource@users.noreply.github.com>  Fri, 18 Sep 2026 12:00:00 -0400
