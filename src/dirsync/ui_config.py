@@ -10,9 +10,9 @@ from tkinter import font as tkfont
 import psutil
 
 from .config import ConfigManager, SyncAction
-from .constants import SUPPORTED_ACTION_TYPES, SUPPORTED_METHODS
+from .constants import SUPPORTED_ACTION_TYPES, SUPPORTED_PROFILES
 from .detector import is_pseudo_mount, normalize_mountpoint
-from .ui_dialogs import alert
+from .ui_dialogs import alert, confirm
 
 
 class ConfigWindow:
@@ -24,7 +24,7 @@ class ConfigWindow:
             name="new-action",
             src_path="",
             dst_path="",
-            method="two_way",
+            profile="backup",
             action_type="manual",
         )
         self._open(action, create=True)
@@ -55,7 +55,7 @@ class ConfigWindow:
 
         src_path_var = tk.StringVar(value=action.src_path)
         dst_path_var = tk.StringVar(value=action.dst_path)
-        method_var = tk.StringVar(value=action.method)
+        profile_var = tk.StringVar(value=action.profile)
         action_type_var = tk.StringVar(value=action.action_type)
         dst_device_id_var = tk.StringVar(value=action.dst_device_id or "")
         dst_path_on_device_var = tk.StringVar(value=action.dst_path_on_device or "")
@@ -121,20 +121,24 @@ class ConfigWindow:
             command=lambda: self._open_usb_picker(root, dst_device_id_var, dst_path_var),
         ).grid(row=0, column=1, sticky="e")
 
-        method_combo = ttk.Combobox(content, textvariable=method_var, values=SUPPORTED_METHODS)
-        method_combo.state(["readonly"])
-        method_combo.grid(row=4, column=0, sticky="ew", padx=(0, 6), pady=(0, 6))
+        ttk.Label(content, text="Sync profile").grid(row=4, column=0, sticky="w")
+        profile_combo = ttk.Combobox(content, textvariable=profile_var, values=SUPPORTED_PROFILES)
+        profile_combo.state(["readonly"])
+        profile_combo.grid(row=5, column=0, sticky="ew", padx=(0, 6), pady=(2, 6))
+        ttk.Label(content, text="Backup keeps destination-only files. Mirror deletes them.").grid(
+            row=6, column=0, columnspan=2, sticky="w", pady=(0, 6)
+        )
         action_type_combo = ttk.Combobox(
             content, textvariable=action_type_var, values=SUPPORTED_ACTION_TYPES
         )
         action_type_combo.state(["readonly"])
-        action_type_combo.grid(row=4, column=1, sticky="ew", padx=(6, 0), pady=(0, 6))
+        action_type_combo.grid(row=5, column=1, sticky="ew", padx=(6, 0), pady=(2, 6))
 
         ttk.Label(content, text="Destination device ID (optional, for USB/HDD auto-match)").grid(
-            row=5, column=0, columnspan=2, sticky="w"
+            row=9, column=0, columnspan=2, sticky="w"
         )
         ttk.Entry(content, textvariable=dst_device_id_var).grid(
-            row=6, column=0, columnspan=2, sticky="ew", pady=(2, 8)
+            row=10, column=0, columnspan=2, sticky="ew", pady=(2, 8)
         )
 
         ttk.Label(content, text="Destination path on device (optional, e.g. backups/photos)").grid(
@@ -149,7 +153,7 @@ class ConfigWindow:
             text="File filters (one glob pattern per line)",
             padding=(8, 6),
         )
-        filter_frame.grid(row=9, column=0, columnspan=2, sticky="nsew", pady=(2, 6))
+        filter_frame.grid(row=11, column=0, columnspan=2, sticky="nsew", pady=(2, 6))
         filter_frame.grid_columnconfigure(0, weight=1)
         filter_frame.grid_columnconfigure(1, weight=1)
 
@@ -180,7 +184,7 @@ class ConfigWindow:
         excludes_text.insert("1.0", "\n".join(action.excludes))
 
         schedule_frame = ttk.LabelFrame(content, text="Schedule (cron)", padding=(8, 6))
-        schedule_frame.grid(row=10, column=0, columnspan=2, sticky="nsew", pady=(2, 6))
+        schedule_frame.grid(row=12, column=0, columnspan=2, sticky="nsew", pady=(2, 6))
         schedule_frame.grid_columnconfigure(0, weight=1)
         schedule_frame.grid_columnconfigure(1, weight=1)
 
@@ -290,7 +294,13 @@ class ConfigWindow:
                 name=name_var.get().strip(),
                 src_path=src_path_var.get().strip(),
                 dst_path=dst_path_var.get().strip(),
-                method=method_var.get(),
+                profile=profile_var.get(),
+                delete_policy=(
+                    "delete_destination_extras"
+                    if profile_var.get() == "mirror"
+                    else "keep_destination"
+                ),
+                conflict_policy="source_wins",
                 action_type=action_type_var.get(),
                 schedule=(
                     schedule_var.get().strip() if action_type_var.get() == "scheduled" else None
@@ -300,6 +310,11 @@ class ConfigWindow:
                 dst_device_id=dst_device_id_var.get().strip() or None,
                 dst_path_on_device=dst_path_on_device_var.get().strip() or None,
             )
+            if payload.profile == "mirror" and not confirm(
+                "Mirror deletes files that exist only at the destination. Continue?",
+                title="Enable destructive mirror",
+            ):
+                return
             try:
                 if create:
                     self.manager.add_action(payload)
@@ -322,7 +337,7 @@ class ConfigWindow:
             root.destroy()
 
         action_buttons = ttk.Frame(content)
-        action_buttons.grid(row=11, column=0, columnspan=2, sticky="e", pady=(8, 0))
+        action_buttons.grid(row=13, column=0, columnspan=2, sticky="e", pady=(8, 0))
         ttk.Button(action_buttons, text=button_text, command=on_submit).grid(
             row=0, column=0, padx=(0, 8)
         )

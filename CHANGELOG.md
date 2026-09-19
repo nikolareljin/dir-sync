@@ -1,6 +1,10 @@
 # Changelog
 
-## [0.2.0] - 2026-09-18
+## [1.0.0] - 2026-09-18
+- Replace ambiguous one-way and two-way methods with explicit backup and mirror profiles.
+- Make backup non-destructive and require confirmation before enabling mirror deletes.
+
+## [1.0.0] - 2026-09-18
 - Add preflight validation for source and destination paths, schedules, dangerous destinations, destructive configurations, and duplicate action names.
 - Validate configuration changes before saving, importing, exporting, or executing actions.
 - Use a safe default backup source instead of the entire home directory.

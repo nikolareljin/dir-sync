@@ -13,7 +13,7 @@ def _make_action(name, action_type="manual", schedule=None):
         name=name,
         src_path="/src",
         dst_path="/dst",
-        method="one_way",
+        profile="backup",
         action_type=action_type,
         schedule=schedule,
     )

@@ -237,7 +237,7 @@ class TestPreflightValidatorCron:
 
 
 class TestPreflightValidatorDestructiveSync:
-    def test_one_way_no_filters_warns(self):
+    def test_mirror_warns(self):
         with TemporaryDirectory() as tmpdir:
             src = Path(tmpdir) / "src"
             dst = Path(tmpdir) / "dst"
@@ -247,16 +247,17 @@ class TestPreflightValidatorDestructiveSync:
                 name="test",
                 src_path=str(src),
                 dst_path=str(dst),
-                method="one_way",
+                profile="mirror",
+                delete_policy="delete_destination_extras",
                 includes=[],
                 excludes=[],
             )
             validator = PreflightValidator()
             is_valid, _errors, warnings = validator.validate_action(action)
             assert is_valid
-            assert any("destructive" in w.lower() or "overwrite" in w.lower() for w in warnings)
+            assert any("mirror deletes" in w.lower() for w in warnings)
 
-    def test_one_way_with_filters_no_warning(self):
+    def test_backup_with_filters_has_no_mirror_warning(self):
         with TemporaryDirectory() as tmpdir:
             src = Path(tmpdir) / "src"
             dst = Path(tmpdir) / "dst"
@@ -266,7 +267,7 @@ class TestPreflightValidatorDestructiveSync:
                 name="test",
                 src_path=str(src),
                 dst_path=str(dst),
-                method="one_way",
+                profile="backup",
                 includes=["*.txt"],
                 excludes=[],
             )

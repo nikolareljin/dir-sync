@@ -9,7 +9,13 @@ from typing import List, Optional, Tuple
 
 import yaml
 
-from .constants import CONFIG_PATH, SUPPORTED_ACTION_TYPES, SUPPORTED_METHODS
+from .constants import (
+    CONFIG_PATH,
+    CONFLICT_POLICIES,
+    DELETE_POLICIES,
+    SUPPORTED_ACTION_TYPES,
+    SUPPORTED_PROFILES,
+)
 from .validator import ConfigValidator, PreflightValidator
 
 # Use module-level logger for consistent logging
@@ -21,7 +27,9 @@ class SyncAction:
     name: str
     src_path: str
     dst_path: str
-    method: str = "two_way"
+    profile: str = "backup"
+    delete_policy: str = "keep_destination"
+    conflict_policy: str = "source_wins"
     action_type: str = "manual"
     schedule: Optional[str] = None  # cron format when action_type == scheduled
     includes: List[str] = field(default_factory=list)  # glob patterns to include
@@ -34,8 +42,19 @@ class SyncAction:
         self.dst_path = os.path.expanduser(self.dst_path)
         self.dst_device_id = (self.dst_device_id or "").strip() or None
         self.dst_path_on_device = (self.dst_path_on_device or "").strip() or None
-        if self.method not in SUPPORTED_METHODS:
-            raise ValueError(f"Unsupported method: {self.method}")
+        if self.profile not in SUPPORTED_PROFILES:
+            raise ValueError(f"Unsupported sync profile: {self.profile}")
+        if self.delete_policy not in DELETE_POLICIES:
+            raise ValueError(f"Unsupported delete policy: {self.delete_policy}")
+        if self.conflict_policy not in CONFLICT_POLICIES:
+            raise ValueError(f"Unsupported conflict policy: {self.conflict_policy}")
+        expected_delete_policy = (
+            "keep_destination" if self.profile == "backup" else "delete_destination_extras"
+        )
+        if self.delete_policy != expected_delete_policy:
+            raise ValueError(
+                f"Sync profile {self.profile} requires delete_policy " f"{expected_delete_policy}"
+            )
         if self.action_type not in SUPPORTED_ACTION_TYPES:
             raise ValueError(f"Unsupported action type: {self.action_type}")
         if self.action_type != "scheduled":
@@ -116,13 +135,31 @@ class ConfigManager:
             if not isinstance(item, dict):
                 raise ValueError(f"Configuration action at index {index} must be a mapping.")
             try:
-                actions.append(SyncAction(**item).normalize())
+                actions.append(self._action_from_payload(item))
             except (AttributeError, TypeError, ValueError) as exc:
                 raise ValueError(
                     f"Configuration action at index {index} is invalid: {exc}"
                 ) from exc
         self.config = SyncConfig(sync_tool=raw.get("sync_tool", "rsync"), actions=actions)
         return self.config
+
+    @staticmethod
+    def _action_from_payload(item: dict) -> SyncAction:
+        """Load legacy actions safely while writing only the profile schema."""
+        payload = dict(item)
+        legacy_method = payload.pop("method", None)
+        if legacy_method == "two_way":
+            raise ValueError(
+                "Legacy two_way actions are not supported because they cannot reconcile "
+                "conflicts safely. Recreate this action as backup or mirror."
+            )
+        if legacy_method == "one_way":
+            payload.setdefault("profile", "backup")
+            payload.setdefault("delete_policy", "keep_destination")
+            payload.setdefault("conflict_policy", "source_wins")
+        elif legacy_method is not None:
+            raise ValueError(f"Unsupported legacy method: {legacy_method}")
+        return SyncAction(**payload).normalize()
 
     def save(self, validate: bool = True) -> None:
         """Save configuration with optional validation.
@@ -191,7 +228,7 @@ class ConfigManager:
                     f"Imported configuration action at index {index} must be a mapping."
                 )
             try:
-                actions.append(SyncAction(**item).normalize())
+                actions.append(self._action_from_payload(item))
             except (AttributeError, TypeError, ValueError) as exc:
                 raise ValueError(
                     f"Imported configuration action at index {index} is invalid: {exc}"
@@ -246,7 +283,7 @@ class ConfigManager:
                 name="documents-backup",
                 src_path=str(default_src),
                 dst_path=str(dst_path / "documents"),
-                method="one_way",
+                profile="backup",
                 action_type="manual",
             )
             self.config.add_action(sample)

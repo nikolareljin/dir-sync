@@ -159,11 +159,11 @@ class PreflightValidator:
                         "Please use valid cron format (e.g., '0 2 * * *').".format(schedule, e)
                     )
 
-        # Check for destructive profile
-        if action.method == "one_way" and self._looks_like_destructive_sync(action):
+        # Mirror intentionally deletes destination-only files and needs a clear warning.
+        if action.profile == "mirror":
             self.warnings.append(
-                "One-way sync with no includes/excludes may overwrite all destination contents. "
-                "Consider adding include/exclude patterns for safety."
+                "Mirror deletes destination-only files so the destination exactly "
+                "matches the source."
             )
 
         is_valid = len(self.errors) == 0
@@ -199,12 +199,6 @@ class PreflightValidator:
                     return True
 
         return False
-
-    def _looks_like_destructive_sync(self, action: SyncAction) -> bool:
-        """Check if sync configuration looks potentially destructive."""
-        # Current heuristic: flag syncs with no include/exclude filters.
-        has_no_filters = not action.includes and not action.excludes
-        return has_no_filters
 
 
 class ConfigValidator:

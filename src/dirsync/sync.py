@@ -23,39 +23,29 @@ class SyncExecutor:
         self.robocopy_path = shutil.which("robocopy") if IS_WINDOWS else None
 
     def run_action(self, action: SyncAction, soft_run: bool = False) -> None:
-        outputs: list[str] = []
-        if action.method == "two_way":
-            outputs.append(
-                self._run_one_way(action.src_path, action.dst_path, action, soft_run=soft_run)
-            )
-            outputs.append(
-                self._run_one_way(
-                    action.dst_path, action.src_path, action, reverse=True, soft_run=soft_run
-                )
-            )
-        else:
-            outputs.append(
-                self._run_one_way(action.src_path, action.dst_path, action, soft_run=soft_run)
-            )
+        output = self._run_source_to_destination(
+            action.src_path, action.dst_path, action, soft_run=soft_run
+        )
 
         if soft_run:
-            combined = "\n".join([o for o in outputs if o]).strip()
-            message = combined if combined else f"Preview for '{action.name}' completed"
+            message = output or f"Preview for '{action.name}' completed"
             self.notifier.prompt("Dir Sync preview", message[:500])
             return
 
         self.notifier.success(f"Action '{action.name}' completed")
 
     def run_source_to_destination(self, action: SyncAction, soft_run: bool = False) -> None:
-        output = self._run_one_way(action.src_path, action.dst_path, action, soft_run=soft_run)
+        output = self._run_source_to_destination(
+            action.src_path, action.dst_path, action, soft_run=soft_run
+        )
         if soft_run:
             preview = output or f"Preview for '{action.name}' completed"
             self.notifier.prompt("Dir Sync preview", preview[:500])
             return
         self.notifier.success(f"Action '{action.name}' completed")
 
-    def _run_one_way(
-        self, src: str, dst: str, action: SyncAction, reverse: bool = False, soft_run: bool = False
+    def _run_source_to_destination(
+        self, src: str, dst: str, action: SyncAction, soft_run: bool = False
     ) -> str:
         src_path = Path(src)
         dst_path = Path(dst)
@@ -65,14 +55,13 @@ class SyncExecutor:
             created_for_preview = True
         if not soft_run:
             dst_path.mkdir(parents=True, exist_ok=True)
-        label = f"{action.name} ({'dst→src' if reverse else 'src→dst'})"
+        label = f"{action.name} (src→dst)"
         try:
             if self.rsync_path:
-                cmd = [
-                    self.rsync_path,
-                    "-avh",
-                    "--delete",
-                ]
+                # Removable filesystems commonly cannot store Unix group metadata.
+                cmd = [self.rsync_path, "-avh", "--no-g"]
+                if action.delete_policy == "delete_destination_extras":
+                    cmd.append("--delete")
                 if soft_run:
                     cmd.extend(["--dry-run", "--stats"])
                 for pattern in action.includes:
@@ -82,12 +71,8 @@ class SyncExecutor:
                 cmd.extend([f"{src_path}/", f"{dst_path}/"])
                 return self._run_command(cmd, label, soft_run)
             if self.robocopy_path:
-                cmd = [
-                    "robocopy",
-                    str(src_path),
-                    str(dst_path),
-                    "/MIR",
-                ]
+                cmd = ["robocopy", str(src_path), str(dst_path)]
+                cmd.append("/MIR" if action.delete_policy == "delete_destination_extras" else "/E")
                 if action.includes:
                     cmd.extend(action.includes)
                 if action.excludes:
@@ -161,14 +146,17 @@ class SyncExecutor:
         if not dst.exists():
             return True
         if self.rsync_path:
-            return self._rsync_has_pending(src, dst)
+            return self._rsync_has_pending(src, dst, action)
         return self._fallback_has_pending(src, dst)
 
     def pending_actions(self, actions: Sequence[SyncAction]) -> list[SyncAction]:
         return [action for action in actions if self.has_pending_source_changes(action)]
 
-    def _rsync_has_pending(self, src: Path, dst: Path) -> bool:
-        cmd = [self.rsync_path, "-ani", "--delete", f"{src}/", f"{dst}/"]
+    def _rsync_has_pending(self, src: Path, dst: Path, action: SyncAction) -> bool:
+        cmd = [self.rsync_path, "-ani"]
+        if action.delete_policy == "delete_destination_extras":
+            cmd.append("--delete")
+        cmd.extend([f"{src}/", f"{dst}/"])
         result = subprocess.run(cmd, capture_output=True, text=True, check=False)
         if result.returncode != 0:
             self.logger.warning("Could not evaluate pending changes: %s", result.stderr.strip())

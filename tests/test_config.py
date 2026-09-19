@@ -14,9 +14,9 @@ class TestSyncActionNormalize:
         assert "~" not in action.src_path
         assert "~" not in action.dst_path
 
-    def test_rejects_invalid_method(self):
-        action = SyncAction(name="a", src_path="/a", dst_path="/b", method="invalid")
-        with pytest.raises(ValueError, match="Unsupported method"):
+    def test_rejects_invalid_profile(self):
+        action = SyncAction(name="a", src_path="/a", dst_path="/b", profile="invalid")
+        with pytest.raises(ValueError, match="Unsupported sync profile"):
             action.normalize()
 
     def test_rejects_invalid_action_type(self):
@@ -61,17 +61,17 @@ class TestSyncActionNormalize:
         result = action.normalize()
         assert result is action
 
-    def test_validate_rejects_unsupported_method(self, tmp_path):
+    def test_validate_rejects_unsupported_profile(self, tmp_path):
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
         dst.mkdir()
-        action = SyncAction(name="a", src_path=str(src), dst_path=str(dst), method="invalid")
+        action = SyncAction(name="a", src_path=str(src), dst_path=str(dst), profile="invalid")
 
         is_valid, errors, _warnings = action.validate()
 
         assert not is_valid
-        assert any("Unsupported method" in error for error in errors)
+        assert any("Unsupported sync profile" in error for error in errors)
 
     def test_validate_rejects_unsupported_action_type(self, tmp_path):
         src = tmp_path / "src"
@@ -110,9 +110,17 @@ class TestSyncConfig:
 
     def test_update_action(self):
         config = SyncConfig()
-        config.add_action(SyncAction(name="up", src_path="/a", dst_path="/b", method="one_way"))
-        config.update_action(SyncAction(name="up", src_path="/x", dst_path="/y", method="two_way"))
-        assert config.find_action("up").method == "two_way"
+        config.add_action(SyncAction(name="up", src_path="/a", dst_path="/b", profile="backup"))
+        config.update_action(
+            SyncAction(
+                name="up",
+                src_path="/x",
+                dst_path="/y",
+                profile="mirror",
+                delete_policy="delete_destination_extras",
+            )
+        )
+        assert config.find_action("up").profile == "mirror"
 
     def test_update_missing_raises(self):
         config = SyncConfig()
@@ -150,7 +158,7 @@ class TestConfigManager:
             name="sample",
             src_path=str(src),
             dst_path=str(dst),
-            method="one_way",
+            profile="backup",
             action_type="manual",
         )
         manager.config.add_action(sample)
@@ -158,7 +166,7 @@ class TestConfigManager:
 
         loaded = ConfigManager(path=config_path)
         assert loaded.config.find_action("sample")
-        assert loaded.config.find_action("sample").method == "one_way"
+        assert loaded.config.find_action("sample").profile == "backup"
 
     def test_roundtrip_with_includes_excludes(self, tmp_path):
         config_path = tmp_path / "config.yml"
@@ -191,7 +199,7 @@ class TestConfigManager:
         src.mkdir()
         dst.mkdir()
         manager.config.add_action(
-            SyncAction(name="exp", src_path=str(src), dst_path=str(dst), method="one_way")
+            SyncAction(name="exp", src_path=str(src), dst_path=str(dst), profile="backup")
         )
         manager.save()
         manager.export(export_path)
@@ -200,7 +208,7 @@ class TestConfigManager:
         other = ConfigManager(path=tmp_path / "other.yml")
         other.import_file(export_path)
         assert other.config.find_action("exp")
-        assert other.config.find_action("exp").method == "one_way"
+        assert other.config.find_action("exp").profile == "backup"
 
     def test_creates_file_on_init(self, tmp_path):
         config_path = tmp_path / "sub" / "config.yml"
@@ -331,7 +339,8 @@ class TestConfigManager:
             name="warn-add",
             src_path=str(src),
             dst_path=str(dst),
-            method="one_way",
+            profile="mirror",
+            delete_policy="delete_destination_extras",
         )
 
         with caplog.at_level("WARNING"):
@@ -339,9 +348,8 @@ class TestConfigManager:
 
         messages = [record.getMessage() for record in caplog.records]
         assert messages == [
-            "Config warning: Action 'warn-add': One-way sync with no includes/excludes may "
-            "overwrite all destination contents. Consider adding include/exclude patterns for "
-            "safety."
+            "Config warning: Action 'warn-add': Mirror deletes destination-only files so "
+            "the destination exactly matches the source."
         ]
 
     def test_update_action_logs_warning_once(self, tmp_path, caplog):
@@ -356,9 +364,12 @@ class TestConfigManager:
                 name="warn-update",
                 src_path=str(src),
                 dst_path=str(dst),
-                method="two_way",
+                profile="mirror",
+                delete_policy="delete_destination_extras",
             )
         )
+
+        caplog.clear()
 
         with caplog.at_level("WARNING"):
             manager.update_action(
@@ -366,15 +377,15 @@ class TestConfigManager:
                     name="warn-update",
                     src_path=str(src),
                     dst_path=str(dst),
-                    method="one_way",
+                    profile="mirror",
+                    delete_policy="delete_destination_extras",
                 )
             )
 
         messages = [record.getMessage() for record in caplog.records]
         assert messages == [
-            "Config warning: Action 'warn-update': One-way sync with no includes/excludes may "
-            "overwrite all destination contents. Consider adding include/exclude patterns for "
-            "safety."
+            "Config warning: Action 'warn-update': Mirror deletes destination-only files so "
+            "the destination exactly matches the source."
         ]
 
 
@@ -390,7 +401,7 @@ def test_config_persists_device_binding_fields(tmp_path):
         name="usb-sync",
         src_path=str(src),
         dst_path=str(dst),
-        method="one_way",
+        profile="backup",
         action_type="auto_on_destination",
         dst_device_id="8D06-A5B2",
         dst_path_on_device="backup/photos",
