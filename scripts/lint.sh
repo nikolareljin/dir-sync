@@ -11,8 +11,16 @@ fi
 source "$SCRIPT_HELPERS_DIR/helpers.sh"
 shlib_import logging
 
+if [[ -x "$SCRIPT_DIR/../.venv/bin/ruff" && -x "$SCRIPT_DIR/../.venv/bin/black" ]]; then
+  ruff_bin="$SCRIPT_DIR/../.venv/bin/ruff"
+  black_bin="$SCRIPT_DIR/../.venv/bin/black"
+else
+  ruff_bin="${RUFF_BIN:-ruff}"
+  black_bin="${BLACK_BIN:-black}"
+fi
+
 print_info "Running Ruff"
-ruff check src tests
+"$ruff_bin" check src tests
 
 print_info "Running Black"
-black --check src tests
+"$black_bin" --check src tests

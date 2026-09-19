@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import datetime as dt
 import sys
 import tkinter as tk
 from pathlib import Path
@@ -10,9 +11,25 @@ from tkinter import font as tkfont
 import psutil
 
 from .config import ConfigManager, SyncAction
-from .constants import SUPPORTED_ACTION_TYPES, SUPPORTED_PROFILES
+from .constants import SUPPORTED_PROFILES
 from .detector import is_pseudo_mount, normalize_mountpoint
 from .ui_dialogs import alert, confirm
+
+TRIGGER_LABELS = {
+    "manual": "Run manually",
+    "auto_on_start": "When the app starts",
+    "auto_on_destination": "When the backup drive connects",
+    "scheduled": "On a schedule",
+}
+TRIGGER_VALUES = {label: value for value, label in TRIGGER_LABELS.items()}
+
+RECURRENCE_LABELS = {
+    "minutes": "Every N minutes",
+    "daily": "Every day",
+    "weekly": "Every week",
+    "monthly": "Every month",
+}
+RECURRENCE_VALUES = {label: value for value, label in RECURRENCE_LABELS.items()}
 
 
 class ConfigWindow:
@@ -43,10 +60,45 @@ class ConfigWindow:
 
         self._configure_native_style(root)
 
-        content = ttk.Frame(root, padding=(14, 12))
-        content.grid(row=0, column=0, sticky="nsew")
+        editor_viewport = ttk.Frame(root)
+        editor_viewport.grid(row=0, column=0, sticky="nsew")
         root.grid_columnconfigure(0, weight=1)
         root.grid_rowconfigure(0, weight=1)
+
+        editor_canvas = tk.Canvas(editor_viewport, highlightthickness=0)
+        editor_scrollbar = ttk.Scrollbar(
+            editor_viewport, orient=tk.VERTICAL, command=editor_canvas.yview
+        )
+        editor_canvas.configure(yscrollcommand=editor_scrollbar.set)
+        editor_canvas.grid(row=0, column=0, sticky="nsew")
+        editor_scrollbar.grid(row=0, column=1, sticky="ns")
+        editor_viewport.grid_columnconfigure(0, weight=1)
+        editor_viewport.grid_rowconfigure(0, weight=1)
+
+        content = ttk.Frame(editor_canvas, padding=(14, 12))
+        content_window = editor_canvas.create_window((0, 0), window=content, anchor="nw")
+
+        def _sync_editor_scrollregion(_event=None):
+            editor_canvas.configure(scrollregion=editor_canvas.bbox("all"))
+
+        def _fit_editor_width(event):
+            editor_canvas.itemconfigure(content_window, width=event.width)
+
+        def _scroll_editor(event):
+            if event.widget.winfo_class() == "Text":
+                return
+            if getattr(event, "num", None) == 4:
+                editor_canvas.yview_scroll(-1, "units")
+            elif getattr(event, "num", None) == 5:
+                editor_canvas.yview_scroll(1, "units")
+            elif event.delta:
+                editor_canvas.yview_scroll(-int(event.delta / 120), "units")
+
+        content.bind("<Configure>", _sync_editor_scrollregion)
+        editor_canvas.bind("<Configure>", _fit_editor_width)
+        root.bind_all("<MouseWheel>", _scroll_editor)
+        root.bind_all("<Button-4>", _scroll_editor)
+        root.bind_all("<Button-5>", _scroll_editor)
 
         ttk.Label(content, text="Action name").grid(row=0, column=0, columnspan=2, sticky="w")
         name_var = tk.StringVar(value=action.name)
@@ -56,22 +108,27 @@ class ConfigWindow:
         src_path_var = tk.StringVar(value=action.src_path)
         dst_path_var = tk.StringVar(value=action.dst_path)
         profile_var = tk.StringVar(value=action.profile)
-        action_type_var = tk.StringVar(value=action.action_type)
+        action_type_var = tk.StringVar(value=TRIGGER_LABELS[action.action_type])
         dst_device_id_var = tk.StringVar(value=action.dst_device_id or "")
         dst_path_on_device_var = tk.StringVar(value=action.dst_path_on_device or "")
 
-        schedule_parts = (action.schedule or "").split()
-        default_schedule = ["0", "0", "*", "*", "*"]
-        builder_parts = schedule_parts[:5] if len(schedule_parts) >= 5 else default_schedule
-        schedule_mode_var = tk.StringVar(
-            value="builder" if len(schedule_parts) in (0, 5) else "custom"
+        schedule_var = tk.StringVar(value=action.schedule or "")
+
+        rule = action.schedule_rule or {}
+        schedule_editor_var = tk.StringVar(
+            value="guided" if rule or not action.schedule else "advanced"
         )
-        schedule_var = tk.StringVar(value=action.schedule or " ".join(builder_parts))
-        sched_min_var = tk.StringVar(value=builder_parts[0])
-        sched_hour_var = tk.StringVar(value=builder_parts[1])
-        sched_dom_var = tk.StringVar(value=builder_parts[2])
-        sched_month_var = tk.StringVar(value=builder_parts[3])
-        sched_dow_var = tk.StringVar(value=builder_parts[4])
+        recurrence_var = tk.StringVar(
+            value=RECURRENCE_LABELS.get(rule.get("kind", "daily"), "Every day")
+        )
+        interval_var = tk.StringVar(value=str(rule.get("interval_minutes", 15)))
+        time_parts = str(rule.get("time", "09:00")).split(":", 1)
+        hour_var = tk.StringVar(value=time_parts[0])
+        minute_var = tk.StringVar(value=time_parts[1] if len(time_parts) == 2 else "00")
+        monthly_day_var = tk.StringVar(value=str(rule.get("day_of_month", 1)))
+        weekday_vars = [
+            tk.BooleanVar(value=index in rule.get("weekdays", [0])) for index in range(7)
+        ]
 
         # SRC pane
         src_frame = ttk.LabelFrame(content, text="Source", padding=(10, 8))
@@ -128,8 +185,9 @@ class ConfigWindow:
         ttk.Label(content, text="Backup keeps destination-only files. Mirror deletes them.").grid(
             row=6, column=0, columnspan=2, sticky="w", pady=(0, 6)
         )
+        ttk.Label(content, text="When should it run?").grid(row=4, column=1, sticky="w")
         action_type_combo = ttk.Combobox(
-            content, textvariable=action_type_var, values=SUPPORTED_ACTION_TYPES
+            content, textvariable=action_type_var, values=tuple(TRIGGER_VALUES)
         )
         action_type_combo.state(["readonly"])
         action_type_combo.grid(row=5, column=1, sticky="ew", padx=(6, 0), pady=(2, 6))
@@ -183,103 +241,168 @@ class ConfigWindow:
         excludes_text.grid(row=1, column=1, sticky="ew", padx=4, pady=(0, 4))
         excludes_text.insert("1.0", "\n".join(action.excludes))
 
-        schedule_frame = ttk.LabelFrame(content, text="Schedule (cron)", padding=(8, 6))
+        schedule_frame = ttk.LabelFrame(content, text="Schedule", padding=(8, 6))
         schedule_frame.grid(row=12, column=0, columnspan=2, sticky="nsew", pady=(2, 6))
         schedule_frame.grid_columnconfigure(0, weight=1)
-        schedule_frame.grid_columnconfigure(1, weight=1)
 
-        def _update_schedule_from_fields(*_args):
-            if schedule_mode_var.get() != "builder":
-                return
-            parts = [
-                sched_min_var.get() or "*",
-                sched_hour_var.get() or "*",
-                sched_dom_var.get() or "*",
-                sched_month_var.get() or "*",
-                sched_dow_var.get() or "*",
-            ]
-            schedule_var.set(" ".join(parts))
+        editor_row = ttk.Frame(schedule_frame)
+        editor_row.grid(row=0, column=0, sticky="w", padx=5, pady=(0, 6))
+        ttk.Radiobutton(
+            editor_row,
+            text="Guided schedule",
+            variable=schedule_editor_var,
+            value="guided",
+        ).grid(row=0, column=0, sticky="w")
+        ttk.Radiobutton(
+            editor_row,
+            text="Advanced cron",
+            variable=schedule_editor_var,
+            value="advanced",
+        ).grid(row=0, column=1, sticky="w", padx=(16, 0))
 
-        def _sync_fields_from_schedule(expr: str):
-            parts = expr.split()
-            if len(parts) >= 5:
-                sched_min_var.set(parts[0])
-                sched_hour_var.set(parts[1])
-                sched_dom_var.set(parts[2])
-                sched_month_var.set(parts[3])
-                sched_dow_var.set(parts[4])
-
-        builder_radio = ttk.Radiobutton(
-            schedule_frame,
-            text="Use schedule builder",
-            variable=schedule_mode_var,
-            value="builder",
-            command=lambda: _toggle_schedule_mode(),
+        guided_frame = ttk.Frame(schedule_frame)
+        guided_frame.grid(row=1, column=0, sticky="ew", padx=5)
+        guided_frame.grid_columnconfigure(1, weight=1)
+        ttk.Label(guided_frame, text="Repeat").grid(row=0, column=0, sticky="w")
+        recurrence_combo = ttk.Combobox(
+            guided_frame,
+            textvariable=recurrence_var,
+            values=tuple(RECURRENCE_VALUES),
+            state="readonly",
+            width=16,
         )
-        builder_radio.grid(row=0, column=0, sticky="w", padx=5, pady=(0, 5))
-        custom_radio = ttk.Radiobutton(
-            schedule_frame,
-            text="Custom cron expression",
-            variable=schedule_mode_var,
-            value="custom",
-            command=lambda: _toggle_schedule_mode(),
-        )
-        custom_radio.grid(row=0, column=1, sticky="w", padx=5, pady=(0, 5))
+        recurrence_combo.grid(row=0, column=1, sticky="w", padx=(8, 0))
 
-        builder_frame = ttk.Frame(schedule_frame)
-        builder_frame.grid(row=1, column=0, columnspan=2, sticky="ew", padx=5, pady=(0, 5))
-        for idx, (label, var) in enumerate(
-            [
-                ("Minute", sched_min_var),
-                ("Hour", sched_hour_var),
-                ("Day of month", sched_dom_var),
-                ("Month", sched_month_var),
-                ("Day of week", sched_dow_var),
-            ]
-        ):
-            ttk.Label(builder_frame, text=label).grid(row=idx, column=0, sticky="w", pady=2)
-            ttk.Entry(builder_frame, textvariable=var, width=20).grid(
-                row=idx, column=1, sticky="ew", pady=2
+        interval_frame = ttk.Frame(guided_frame)
+        ttk.Label(interval_frame, text="Run every").grid(row=0, column=0, sticky="w")
+        ttk.Spinbox(interval_frame, from_=1, to=59, textvariable=interval_var, width=5).grid(
+            row=0, column=1, padx=6
+        )
+        ttk.Label(interval_frame, text="minutes").grid(row=0, column=2, sticky="w")
+
+        time_frame = ttk.Frame(guided_frame)
+        ttk.Label(time_frame, text="At").grid(row=0, column=0, sticky="w")
+        ttk.Spinbox(
+            time_frame, from_=0, to=23, format="%02.0f", textvariable=hour_var, width=4
+        ).grid(row=0, column=1, padx=(6, 1))
+        ttk.Label(time_frame, text=":").grid(row=0, column=2)
+        ttk.Spinbox(
+            time_frame, from_=0, to=59, format="%02.0f", textvariable=minute_var, width=4
+        ).grid(row=0, column=3, padx=(1, 8))
+        time_hint = ttk.Label(time_frame)
+        time_hint.grid(row=0, column=4, sticky="w")
+
+        weekdays_frame = ttk.Frame(guided_frame)
+        ttk.Label(weekdays_frame, text="On").grid(row=0, column=0, sticky="w")
+        for index, day in enumerate(("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")):
+            ttk.Checkbutton(weekdays_frame, text=day, variable=weekday_vars[index]).grid(
+                row=0, column=index + 1, padx=(6, 0)
             )
-        builder_frame.grid_columnconfigure(1, weight=1)
 
-        ttk.Label(schedule_frame, text="Cron expression").grid(
-            row=2, column=0, columnspan=2, sticky="w", padx=5
+        monthly_frame = ttk.Frame(guided_frame)
+        ttk.Label(monthly_frame, text="On day").grid(row=0, column=0, sticky="w")
+        ttk.Spinbox(monthly_frame, from_=1, to=31, textvariable=monthly_day_var, width=4).grid(
+            row=0, column=1, padx=6
         )
-        custom_entry = ttk.Entry(schedule_frame, textvariable=schedule_var)
-        custom_entry.grid(row=3, column=0, columnspan=2, sticky="ew", padx=5, pady=(0, 5))
+        ttk.Label(monthly_frame, text="(uses the last day in shorter months)").grid(
+            row=0, column=2, sticky="w"
+        )
 
-        for var in (sched_min_var, sched_hour_var, sched_dom_var, sched_month_var, sched_dow_var):
-            var.trace_add("write", _update_schedule_from_fields)
+        next_run_var = tk.StringVar()
+        ttk.Label(guided_frame, textvariable=next_run_var).grid(
+            row=5, column=0, columnspan=2, sticky="w", pady=(8, 0)
+        )
 
-        def _toggle_schedule_mode():
-            if schedule_mode_var.get() == "builder":
-                custom_entry.state(["disabled"])
-                builder_frame.grid()
-                _sync_fields_from_schedule(schedule_var.get())
-                _update_schedule_from_fields()
-            else:
-                custom_entry.state(["!disabled"])
-                builder_frame.grid_remove()
+        advanced_frame = ttk.Frame(schedule_frame)
+        ttk.Label(advanced_frame, text="Cron expression").grid(row=0, column=0, sticky="w")
+        custom_entry = ttk.Entry(advanced_frame, textvariable=schedule_var, width=42)
+        custom_entry.grid(row=1, column=0, sticky="ew", pady=(2, 0))
+        ttk.Label(
+            advanced_frame,
+            text="For existing or expert schedules. Guided changes replace this expression.",
+        ).grid(row=2, column=0, sticky="w", pady=(4, 0))
 
-        _toggle_schedule_mode()
+        def _time_value() -> str:
+            try:
+                hour, minute = int(hour_var.get()), int(minute_var.get())
+            except ValueError:
+                return "00:00"
+            return f"{max(0, min(23, hour)):02d}:{max(0, min(59, minute)):02d}"
 
-        def _set_schedule_enabled(enabled: bool):
-            state = ["!disabled"] if enabled else ["disabled"]
-            for widget in [builder_radio, custom_radio, custom_entry]:
-                widget.state(state)
-            for child in builder_frame.winfo_children():
+        def _guided_rule() -> dict:
+            kind = RECURRENCE_VALUES[recurrence_var.get()]
+            if kind == "minutes":
                 try:
-                    child.state(state)
-                except Exception:
-                    pass
+                    interval = int(interval_var.get())
+                except ValueError:
+                    interval = 0
+                return {"kind": kind, "interval_minutes": interval}
+            rule = {"kind": kind, "time": _time_value()}
+            if kind == "weekly":
+                rule["weekdays"] = [
+                    index for index, value in enumerate(weekday_vars) if value.get()
+                ]
+            if kind == "monthly":
+                try:
+                    rule["day_of_month"] = int(monthly_day_var.get())
+                except ValueError:
+                    rule["day_of_month"] = 0
+            return rule
+
+        def _update_schedule_editor(*_args):
+            guided_frame.grid_remove()
+            advanced_frame.grid_remove()
+            if schedule_editor_var.get() == "advanced":
+                advanced_frame.grid(row=1, column=0, sticky="ew", padx=5)
+                return
+            guided_frame.grid()
+            kind = RECURRENCE_VALUES[recurrence_var.get()]
+            interval_frame.grid_forget()
+            time_frame.grid_forget()
+            weekdays_frame.grid_forget()
+            monthly_frame.grid_forget()
+            if kind == "minutes":
+                interval_frame.grid(row=1, column=0, columnspan=2, sticky="w", pady=(8, 0))
+                next_run_var.set("Runs on the next matching local-time minute.")
+                return
+            time_frame.grid(row=1, column=0, columnspan=2, sticky="w", pady=(8, 0))
+            if kind == "weekly":
+                weekdays_frame.grid(row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
+            elif kind == "monthly":
+                monthly_frame.grid(row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
+            try:
+                from .scheduler import ActionScheduler
+
+                next_run = ActionScheduler._next_rule_time(_guided_rule(), dt.datetime.now())
+                next_run_var.set(f"Next run: {next_run:%a, %d %b %Y at %H:%M}")
+            except (KeyError, TypeError, ValueError):
+                next_run_var.set("Choose a valid local time and recurrence.")
+            try:
+                hour, minute = map(int, _time_value().split(":"))
+                suffix = "AM" if hour < 12 else "PM"
+                display_hour = hour % 12 or 12
+                time_hint.configure(text=f"({display_hour}:{minute:02d}{suffix.lower()})")
+            except ValueError:
+                time_hint.configure(text="")
 
         def _toggle_schedule_visibility(*_args):
-            is_scheduled = action_type_var.get() == "scheduled"
-            _set_schedule_enabled(is_scheduled)
-            if is_scheduled:
-                _toggle_schedule_mode()
+            if action_type_var.get() == TRIGGER_LABELS["scheduled"]:
+                schedule_frame.grid()
+                _update_schedule_editor()
+            else:
+                schedule_frame.grid_remove()
 
+        for variable in (
+            schedule_editor_var,
+            recurrence_var,
+            interval_var,
+            hour_var,
+            minute_var,
+            monthly_day_var,
+        ):
+            variable.trace_add("write", _update_schedule_editor)
+        for variable in weekday_vars:
+            variable.trace_add("write", _update_schedule_editor)
         action_type_var.trace_add("write", _toggle_schedule_visibility)
         _toggle_schedule_visibility()
 
@@ -301,9 +424,18 @@ class ConfigWindow:
                     else "keep_destination"
                 ),
                 conflict_policy="source_wins",
-                action_type=action_type_var.get(),
+                action_type=TRIGGER_VALUES[action_type_var.get()],
                 schedule=(
-                    schedule_var.get().strip() if action_type_var.get() == "scheduled" else None
+                    schedule_var.get().strip()
+                    if action_type_var.get() == TRIGGER_LABELS["scheduled"]
+                    and schedule_editor_var.get() == "advanced"
+                    else None
+                ),
+                schedule_rule=(
+                    _guided_rule()
+                    if action_type_var.get() == TRIGGER_LABELS["scheduled"]
+                    and schedule_editor_var.get() == "guided"
+                    else None
                 ),
                 includes=_parse_patterns(includes_text),
                 excludes=_parse_patterns(excludes_text),
@@ -354,9 +486,26 @@ class ConfigWindow:
         root.mainloop()
 
     def _choose_dir(self, variable: tk.StringVar) -> None:
-        path = filedialog.askdirectory(mustexist=False)
+        initial_directory = self._picker_initial_directory(variable.get())
+        path = filedialog.askdirectory(initialdir=str(initial_directory), mustexist=True)
         if path:
             variable.set(path)
+            self.manager.remember_browse_directory(path)
+
+    def _picker_initial_directory(self, value: str) -> Path:
+        """Pick a useful filesystem location without falling back to the process cwd."""
+        candidate = Path(value).expanduser() if value.strip() else None
+        if candidate and candidate.is_absolute():
+            if candidate.is_dir():
+                return candidate
+            if candidate.parent.is_dir():
+                return candidate.parent
+        remembered = self.manager.last_browse_directory
+        if remembered:
+            remembered_path = Path(remembered).expanduser()
+            if remembered_path.is_absolute() and remembered_path.is_dir():
+                return remembered_path
+        return Path.home()
 
     def _create_dir(self, variable: tk.StringVar) -> None:
         path = variable.get().strip()
@@ -485,8 +634,10 @@ class ConfigWindow:
 
     def _fit_window_to_content(self, root: tk.Tk, min_width: int, min_height: int) -> None:
         root.update_idletasks()
+        max_height = max(480, root.winfo_screenheight() - 80)
+        root.minsize(min_width, min(min_height, max_height))
         width = max(min_width, root.winfo_reqwidth() + 20)
-        height = max(min_height, root.winfo_reqheight() + 20)
+        height = min(max_height, max(min_height, root.winfo_reqheight() + 20))
         root.geometry(f"{width}x{height}")
 
     def _configure_native_style(self, root: tk.Tk) -> None:
