@@ -60,10 +60,45 @@ class ConfigWindow:
 
         self._configure_native_style(root)
 
-        content = ttk.Frame(root, padding=(14, 12))
-        content.grid(row=0, column=0, sticky="nsew")
+        editor_viewport = ttk.Frame(root)
+        editor_viewport.grid(row=0, column=0, sticky="nsew")
         root.grid_columnconfigure(0, weight=1)
         root.grid_rowconfigure(0, weight=1)
+
+        editor_canvas = tk.Canvas(editor_viewport, highlightthickness=0)
+        editor_scrollbar = ttk.Scrollbar(
+            editor_viewport, orient=tk.VERTICAL, command=editor_canvas.yview
+        )
+        editor_canvas.configure(yscrollcommand=editor_scrollbar.set)
+        editor_canvas.grid(row=0, column=0, sticky="nsew")
+        editor_scrollbar.grid(row=0, column=1, sticky="ns")
+        editor_viewport.grid_columnconfigure(0, weight=1)
+        editor_viewport.grid_rowconfigure(0, weight=1)
+
+        content = ttk.Frame(editor_canvas, padding=(14, 12))
+        content_window = editor_canvas.create_window((0, 0), window=content, anchor="nw")
+
+        def _sync_editor_scrollregion(_event=None):
+            editor_canvas.configure(scrollregion=editor_canvas.bbox("all"))
+
+        def _fit_editor_width(event):
+            editor_canvas.itemconfigure(content_window, width=event.width)
+
+        def _scroll_editor(event):
+            if event.widget.winfo_class() == "Text":
+                return
+            if getattr(event, "num", None) == 4:
+                editor_canvas.yview_scroll(-1, "units")
+            elif getattr(event, "num", None) == 5:
+                editor_canvas.yview_scroll(1, "units")
+            elif event.delta:
+                editor_canvas.yview_scroll(-int(event.delta / 120), "units")
+
+        content.bind("<Configure>", _sync_editor_scrollregion)
+        editor_canvas.bind("<Configure>", _fit_editor_width)
+        root.bind_all("<MouseWheel>", _scroll_editor)
+        root.bind_all("<Button-4>", _scroll_editor)
+        root.bind_all("<Button-5>", _scroll_editor)
 
         ttk.Label(content, text="Action name").grid(row=0, column=0, columnspan=2, sticky="w")
         name_var = tk.StringVar(value=action.name)
@@ -599,8 +634,10 @@ class ConfigWindow:
 
     def _fit_window_to_content(self, root: tk.Tk, min_width: int, min_height: int) -> None:
         root.update_idletasks()
+        max_height = max(480, root.winfo_screenheight() - 80)
+        root.minsize(min_width, min(min_height, max_height))
         width = max(min_width, root.winfo_reqwidth() + 20)
-        height = max(min_height, root.winfo_reqheight() + 20)
+        height = min(max_height, max(min_height, root.winfo_reqheight() + 20))
         root.geometry(f"{width}x{height}")
 
     def _configure_native_style(self, root: tk.Tk) -> None:
