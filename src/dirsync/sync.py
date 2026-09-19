@@ -58,7 +58,8 @@ class SyncExecutor:
         label = f"{action.name} (src→dst)"
         try:
             if self.rsync_path:
-                cmd = [self.rsync_path, "-avh"]
+                # Removable filesystems commonly cannot store Unix group metadata.
+                cmd = [self.rsync_path, "-avh", "--no-g"]
                 if action.delete_policy == "delete_destination_extras":
                     cmd.append("--delete")
                 if soft_run:

@@ -200,6 +200,7 @@ class TestRsyncCommandBuilding:
         assert "--exclude" in cmd
         assert "*.log" in cmd
         assert "tmp/" in cmd
+        assert "--no-g" in cmd
 
         # Verify ordering: includes before excludes, paths at end
         include_idx = cmd.index("--include")
