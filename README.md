@@ -6,7 +6,7 @@ Think of it as an automated backup / rsync of your important directories.
 
 Setting up directories: 
 
-<img width="1270" height="918" alt="image" src="https://github.com/user-attachments/assets/8e96f02b-0dfa-413a-bf86-a75020a7a59e" />
+See the full guide at [Dir Sync documentation](https://nikolareljin.github.io/dir-sync/).
 
 
 ## Features
@@ -60,7 +60,13 @@ Run these commands from the repository root. Each delegates to the existing impl
 
 `Preview only (dry run)` is enabled by default in the tray menu. Leave it checked to inspect changes without copying files, or uncheck it before selecting an action to run it for real.
 
-For additional background or optional packaging targets, see `docs/BUILD.md`. Testing guidance lives in `docs/TESTING.md`.
+For detailed screenshots and usage guidance, see the [Dir Sync documentation](https://nikolareljin.github.io/dir-sync/). For additional background or optional packaging targets, see `docs/BUILD.md`. Testing guidance lives in `docs/TESTING.md`.
+
+### Preview the documentation site
+
+Serve the local documentation site with `make site`. It starts at the first
+available port from `8000`; open the URL it prints in a browser. To request a
+different starting port, use `make site PORT=8080`. Press `Ctrl-C` to stop it.
 
 ## Sync profiles
 

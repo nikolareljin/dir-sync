@@ -20,7 +20,7 @@ BREW_TARBALL_URL ?= https://github.com/$(REPO_SLUG)/releases/download/$(VERSION)
 
 .DEFAULT_GOAL := help
 
-.PHONY: help check-submodule update deps lint test ci run clean build install uninstall \
+.PHONY: help check-submodule update deps lint test ci run site clean build install uninstall \
 	package-init package-refresh deb rpm ppa ppa-dry brew brew-formula brew-publish \
 	package-all
 
@@ -35,6 +35,7 @@ help:
 	@echo "  make ci               Run lint + tests"
 	@echo "  make build            Build dist/dir-sync with PyInstaller"
 	@echo "  make run              Run app from source"
+	@echo "  make site [PORT=8000] Preview the documentation site locally"
 	@echo "  make install          Install built binary to \$$DESTDIR\$$PREFIX/bin/$(APP_NAME)"
 	@echo "  make uninstall        Remove installed binary from \$$DESTDIR\$$PREFIX/bin/$(APP_NAME)"
 	@echo ""
@@ -79,6 +80,9 @@ ci: lint test
 
 run:
 	$(PYTHON) -m dirsync.app
+
+site: check-submodule
+	./scripts/serve_site.sh "$(PORT)"
 
 clean:
 	rm -rf build dist *.spec

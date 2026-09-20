@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import datetime as dt
+import subprocess
+import sys
 import threading
 import time
 import tkinter as tk
@@ -15,8 +17,10 @@ from .config import ConfigManager, SyncAction
 from .constants import EXPORT_DIR
 from .notifications import Notifier
 from .sync import SyncExecutor
+from .ui_about import show_about
 from .ui_config import ConfigWindow
 from .ui_dialogs import alert
+from .ui_dispatcher import UiDispatcher
 
 
 class ActionStatus(TypedDict):
@@ -31,11 +35,15 @@ class ToolbarController:
         executor: SyncExecutor,
         notifier: Notifier,
         on_config_change: Callable[[], None],
+        ui: UiDispatcher,
     ):
         self.manager = manager
         self.executor = executor
         self.notifier = notifier
-        self.config_window = ConfigWindow(manager)
+        self.ui = ui
+        if not ui.root:
+            raise RuntimeError("UI dispatcher must be started before the toolbar")
+        self.config_window = ConfigWindow(manager, ui.root)
         self.on_config_change = on_config_change
         self.soft_run_enabled = True
         self.action_status: dict[str, ActionStatus] = {}
@@ -44,10 +52,11 @@ class ToolbarController:
         )
 
     def run(self):
-        self.icon.run(setup=self._setup_icon)
+        self.icon.run_detached(setup=self._setup_icon)
 
     def stop(self):
         self.icon.stop()
+        self.ui.stop()
 
     def refresh(self):
         self.icon.menu = self._build_menu()
@@ -84,10 +93,11 @@ class ToolbarController:
                 checked=self._is_soft_run_checked,
             ),
             pystray.MenuItem("Run all changed dirs", lambda icon, item: self._run_all_changed()),
-            pystray.MenuItem("Add new action", lambda icon, item: self._open_creator()),
+            pystray.MenuItem("Add new action", lambda icon, item: self._launch_ui("add")),
             pystray.MenuItem("Modify action", edit_menu),
-            pystray.MenuItem("Export", lambda icon, item: self._export_config()),
-            pystray.MenuItem("Import", lambda icon, item: self._import_config()),
+            pystray.MenuItem("Export", lambda icon, item: self.ui.dispatch(self._export_config)),
+            pystray.MenuItem("Import", lambda icon, item: self.ui.dispatch(self._import_config)),
+            pystray.MenuItem("About Dir Sync", lambda icon, item: self._launch_ui("about")),
             pystray.MenuItem("Quit", lambda icon, item: self.stop()),
         )
         return menu
@@ -103,7 +113,7 @@ class ToolbarController:
 
     def _make_editor(self, name: str) -> Callable:
         def _edit(icon, item):
-            self._edit_action(name)
+            self._launch_ui("edit", name)
 
         return _edit
 
@@ -117,8 +127,22 @@ class ToolbarController:
         return _runner
 
     def _open_creator(self):
-        self.config_window.add_action()
-        self.refresh()
+        self._launch_ui("add")
+
+    def _launch_ui(self, command: str, action_name: str | None = None) -> None:
+        if getattr(sys, "frozen", False):
+            args = [sys.executable, "--ui-process", command]
+        else:
+            args = [sys.executable, "-m", "dirsync.app", "--ui-process", command]
+        if action_name:
+            args.append(action_name)
+        subprocess.Popen(args)
+
+    def _show_about(self):
+        try:
+            show_about(self.ui.root)
+        except tk.TclError as exc:  # pragma: no cover - depends on the desktop session
+            self.notifier.error(f"Unable to open About Dir Sync: {exc}")
 
     def _edit_action(self, name: str):
         self.config_window.edit_action(name)

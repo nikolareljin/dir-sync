@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,7 @@ from dirsync.notifications import Notifier
 from dirsync.scheduler import ActionScheduler
 from dirsync.sync import SyncExecutor
 from dirsync.ui_dialogs import confirm
+from dirsync.ui_dispatcher import UiDispatcher
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 cli = typer.Typer(help="Dir Sync toolbar app")
@@ -23,7 +25,8 @@ class DirSyncApp:
         self.manager = ConfigManager()
         self.notifier = Notifier()
         self.executor = SyncExecutor(self.notifier)
-        self.toolbar: Any = self._create_toolbar()
+        self.ui = UiDispatcher()
+        self.toolbar: Any = None
         self.scheduler = ActionScheduler(self.executor.run_action)
         self.detector = DriveDetector(self._handle_new_drive, self._handle_known_drive)
 
@@ -37,15 +40,20 @@ class DirSyncApp:
                     "'sudo apt install python3-tk') and rebuild dir-sync."
                 ) from exc
             raise
-        return ToolbarController(self.manager, self.executor, self.notifier, self._refresh_watchers)
+        return ToolbarController(
+            self.manager, self.executor, self.notifier, self._refresh_watchers, self.ui
+        )
 
     def start(self):
         self.manager.ensure_default()
+        self.ui.start()
+        self.toolbar = self._create_toolbar()
         self._refresh_watchers()
         self.scheduler.configure(self.manager.config.actions)
         self.scheduler.start()
         self.detector.start()
         self.toolbar.run()
+        self.ui.run()
 
     def _refresh_watchers(self):
         destinations = {self._normalize_path(a.dst_path) for a in self.manager.config.actions}
@@ -59,11 +67,12 @@ class DirSyncApp:
         if not drive.is_removable:
             return
         self.notifier.prompt("Drive detected", f"New removable device {drive.mountpoint} connected")
-        if confirm(
-            f"Create automation for {drive.mountpoint}?\nDevice ID: {drive.volume_id or 'unknown'}"
-        ):
-            self.toolbar.config_window.add_action()
-            self.toolbar.refresh()
+        prompt = (
+            f"Create automation for {drive.mountpoint}?\n"
+            f"Device ID: {drive.volume_id or 'unknown'}"
+        )
+        if self.ui.call(lambda: confirm(prompt)):
+            self.ui.dispatch(self.toolbar.config_window.add_action)
 
     def _handle_known_drive(self, drive: MountedDrive) -> None:
         matches = [
@@ -82,7 +91,9 @@ class DirSyncApp:
             )
             if soft_run:
                 prompt = f"{prompt}\nMode: soft run"
-            if action.action_type == "auto_on_destination" or confirm(prompt):
+            if action.action_type == "auto_on_destination" or self.ui.call(
+                lambda prompt=prompt: confirm(prompt)
+            ):
                 self.executor.run_action(resolved_action, soft_run=soft_run)
 
     def _action_matches_drive(self, action, drive: MountedDrive) -> bool:
@@ -120,6 +131,11 @@ def run():  # pragma: no cover - UI entrypoint
 
 
 def main():  # pragma: no cover
+    if len(sys.argv) > 1 and sys.argv[1] == "--ui-process":
+        from dirsync.ui_process import main as ui_process_main
+
+        ui_process_main(sys.argv[2:])
+        return
     cli()
 
 

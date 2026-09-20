@@ -101,6 +101,16 @@ if ! "$PYTHON_BIN" -c "import PyInstaller" >/dev/null 2>&1; then
   "$PYTHON_BIN" -m pip install pyinstaller
 fi
 
+# PyInstaller's --copy-metadata needs the project distribution to be installed
+# in the interpreter that performs the build. The system-site-packages fallback
+# above intentionally creates a separate environment, so install the local
+# project here rather than assuming metadata exists in every build interpreter.
+print_info "Installing local project metadata for the packaged About dialog"
+"$PYTHON_BIN" -m pip install --no-deps --editable "$PROJECT_ROOT"
+
+# Ubuntu provides the Ayatana replacement for the retired AppIndicator3
+# namespace. Excluding the absent legacy typelib prevents PyInstaller from
+# probing it while retaining pystray's Ayatana fallback at runtime.
 "$PYTHON_BIN" -m PyInstaller \
   --clean \
   --noconfirm \
@@ -110,7 +120,10 @@ fi
   --name dir-sync \
   --windowed \
   --onefile \
+  --copy-metadata dir-sync \
   --collect-submodules plyer.platforms \
+  --exclude-module gi.repository.AppIndicator3 \
+  --hidden-import gi.repository.AyatanaAppIndicator3 \
   --hidden-import pystray._appindicator \
   --hidden-import pystray._gtk \
   --hidden-import pystray._xorg \

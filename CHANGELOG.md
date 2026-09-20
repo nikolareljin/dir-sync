@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.2.0] - 2026-09-19
+- Add an in-app About dialog and a GitHub Pages documentation site.
+- Add safe, synthetic screenshots and detailed guidance for backups, sync modes, and schedules.
+
 ## [1.1.0] - 2026-09-19
 - Add a guided local-time scheduler and remembered directory browsing.
 - Use plain-semver release tags through shared release automation.

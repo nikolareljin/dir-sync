@@ -1,5 +1,5 @@
 pkgname=dir-sync
-pkgver=1.1.0
+pkgver=1.2.0
 pkgrel=1
 pkgdesc="Cross-platform toolbar app for rsync-based directory synchronization."
 arch=('x86_64')
@@ -7,7 +7,7 @@ url="https://github.com/nikolareljin/dir-sync"
 license=('MIT')
 depends=('rsync')
 makedepends=('git' 'python' 'python-pip' 'make')
-source=("https://github.com/nikolareljin/dir-sync/archive/refs/tags/1.1.0.tar.gz")
+source=("https://github.com/nikolareljin/dir-sync/archive/refs/tags/1.2.0.tar.gz")
 sha256sums=('SKIP')
 
 build() {
