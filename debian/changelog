@@ -1,4 +1,4 @@
-dir-sync (1.2.1-1) jammy; urgency=medium
+dir-sync (1.2.0-1) jammy; urgency=medium
 
   * Add guided scheduling, remembered folder browsing, and plain-semver release automation.
   * Keep advanced cron support for existing configurations.

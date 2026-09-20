@@ -1,8 +1,5 @@
 # Changelog
 
-## [1.2.1] - 2026-09-20
-- Fix Linux tray menu actions by opening configuration and About windows in a dedicated GUI process.
-
 ## [1.2.0] - 2026-09-19
 - Add an in-app About dialog and a GitHub Pages documentation site.
 - Add safe, synthetic screenshots and detailed guidance for backups, sync modes, and schedules.
