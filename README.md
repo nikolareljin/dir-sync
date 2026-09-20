@@ -1,8 +1,16 @@
 # Dir Sync
 
+<p align="center">
+  <img src="assets/logo.svg" alt="Dir Sync logo" width="180">
+</p>
+
 Dir Sync is a cross-platform desktop companion for safe directory backups. It lives in the system tray, lets you define reusable sync actions, watches for removable or network destinations, and surfaces notifications when jobs finish or devices appear.
 
 Think of it as an automated backup / rsync of your important directories.
+
+<p align="center">
+  <img src="site/assets/screenshots/action-editor.png" alt="Dir Sync action editor using synthetic /tmp demo directories" width="760">
+</p>
 
 Setting up directories: 
 
