@@ -33,8 +33,9 @@ RECURRENCE_VALUES = {label: value for value, label in RECURRENCE_LABELS.items()}
 
 
 class ConfigWindow:
-    def __init__(self, manager: ConfigManager):
+    def __init__(self, manager: ConfigManager, parent: tk.Misc | None = None):
         self.manager = manager
+        self.parent = parent
 
     def add_action(self) -> None:
         action = SyncAction(
@@ -53,7 +54,9 @@ class ConfigWindow:
         self._open(copy.deepcopy(action), create=False)
 
     def _open(self, action: SyncAction, create: bool) -> None:
-        root = tk.Tk()
+        if self.parent is None:
+            raise RuntimeError("ConfigWindow requires a Tk parent to open a dialog")
+        root = tk.Toplevel(self.parent)
         root.title(f"Dir Sync - {action.name}")
         root.geometry("820x640")
         root.minsize(760, 580)
@@ -483,7 +486,8 @@ class ConfigWindow:
         content.grid_columnconfigure(1, weight=1)
 
         self._fit_window_to_content(root, min_width=760, min_height=580)
-        root.mainloop()
+        root.lift()
+        root.focus_force()
 
     def _choose_dir(self, variable: tk.StringVar) -> None:
         initial_directory = self._picker_initial_directory(variable.get())

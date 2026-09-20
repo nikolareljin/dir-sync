@@ -4,9 +4,9 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dir-sync"
-version = "1.1.0"
+version = "1.2.1"
 description = "Cross-platform toolbar app that synchronizes directories via rsync-style strategies."
-authors = [{ name = "Dir Sync Contributors" }]
+authors = [{ name = "Nik Reljin" }]
 license = { text = "MIT" }
 readme = "README.md"
 requires-python = ">=3.10"

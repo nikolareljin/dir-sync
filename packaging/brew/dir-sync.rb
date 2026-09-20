@@ -4,8 +4,8 @@
 class DirSync < Formula
   desc "Cross-platform rsync directory synchronizer"
   homepage "https://github.com/nikolareljin/dir-sync"
-  url "https://github.com/nikolareljin/dir-sync/archive/refs/tags/1.1.0.tar.gz"
-  version "1.1.0"
+  url "https://github.com/nikolareljin/dir-sync/archive/refs/tags/1.2.1.tar.gz"
+  version "1.2.1"
   # sha256 "FILL_IN_SHA256_FOR_TARBALL"
   license "MIT"
 

@@ -32,7 +32,7 @@ jobs:
           python -m pip install pyinstaller
       - name: Build executable
         run: |
-          pyinstaller --noconfirm --name dir-sync --onefile --windowed --workpath .pyinstaller-build --specpath .pyinstaller-spec src/dirsync/app.py
+          pyinstaller --noconfirm --name dir-sync --onefile --windowed --copy-metadata dir-sync --workpath .pyinstaller-build --specpath .pyinstaller-spec src/dirsync/app.py
       - name: Package artifact
         shell: bash
         env:
